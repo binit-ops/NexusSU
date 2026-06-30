@@ -1,37 +1,23 @@
-use std::fs::OpenOptions;
-use std::io;
-use memmap2::MmapMut;
+// patcher/src/main.rs (Append this to your existing code)
 
-fn locate_pattern(data: &[u8], pattern: &[Option<u8>]) -> Option<usize> {
-    if pattern.is_empty() || data.len() < pattern.len() { return None; }
-    data.windows(pattern.len()).position(|window| {
-        window.iter().zip(pattern.iter()).all(|(b, p)| p.map_or(true, |expected| *b == expected))
-    })
+fn find_code_cave(data: &[u8], size: usize) -> Option<usize> {
+    // Scan for a block of null bytes large enough for our payload
+    let mut count = 0;
+    for (i, &byte) in data.iter().enumerate() {
+        if byte == 0 {
+            count += 1;
+            if count >= size {
+                return Some(i - size + 1); // Return the start of the cave
+            }
+        } else {
+            count = 0;
+        }
+    }
+    None
 }
 
-fn main() -> io::Result<()> {
-    println!("=== Nexus SU Boot Initialization ===");
-    
-    let file = match OpenOptions::new().read(true).write(true).open("Image") {
-        Ok(f) => f,
-        Err(_) => {
-            println!("[-] Waiting for 'Image' binary to begin testing.");
-            return Ok(());
-        }
-    };
-
-    let mmap = unsafe { MmapMut::map_mut(&file)? };
-    println!("[+] Kernel mapped to memory: {} bytes.", mmap.len());
-
-    let dispatch_sig: Vec<Option<u8>> = vec![
-        Some(0x08), None, None, Some(0x90), // adrp x8, table
-        Some(0x08), None, None, Some(0x91), // add x8, x8, table
-    ];
-
-    match locate_pattern(&mmap, &dispatch_sig) {
-        Some(offset) => println!("[+] Syscall routing vector matched at 0x{:X}", offset),
-        None => println!("[-] Signature not found."),
-    }
-    
-    Ok(())
+fn inject_payload(data: &mut MmapMut, offset: usize, payload: &[u8]) {
+    // Copy the payload binary into the identified memory cave
+    data[offset..offset + payload.len()].copy_from_slice(payload);
+    println!("[+] Nexus SU payload injected at offset 0x{:X}", offset);
 }
