@@ -35,4 +35,5 @@ fn locate_pattern(data: &[u8], pattern: &[Option<u8>]) -> Option<usize> {
                                                                                                                                                 
                                                                                                                                                     Ok(())
                                                                                                                                                     }
-                                                                                                                                                    
+
+                                                                                                                                            
