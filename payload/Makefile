@@ -1,22 +1,19 @@
 CC = $(CROSS_COMPILE)gcc
 OBJCOPY = $(CROSS_COMPILE)objcopy
 
-# Compiler flags for raw memory injection
-CFLAGS = -Wall -O2 -nostdlib -fno-stack-protector -fPIC
-
-# Linker flags: 
-# -N: Do not page-align data (fixes PHDR error)
-# --build-id=none: Removes GNU build notes
-# -e grant_nexus_su_root: Defines our custom entry point instead of _start
-LDFLAGS = -Wl,-N -Wl,--build-id=none -Wl,-e,grant_nexus_su_root -Ttext 0x0
+# -c tells GCC to compile to an object file without invoking the linker
+# -fomit-frame-pointer keeps the assembly minimal and clean
+CFLAGS = -Wall -O2 -nostdlib -fno-stack-protector -fPIC -fomit-frame-pointer
 
 all: nexus_su.bin
 
-nexus_su.elf: injector.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -o nexus_su.elf injector.c
+# Step 1: Compile C into an Object File (.o)
+injector.o: injector.c
+	$(CC) $(CFLAGS) -c injector.c -o injector.o
 
-nexus_su.bin: nexus_su.elf
-	$(OBJCOPY) -O binary -R .note -R .comment -S nexus_su.elf nexus_su.bin
+# Step 2: Extract ONLY the raw executable instructions (.text) into the final .bin
+nexus_su.bin: injector.o
+	$(OBJCOPY) -O binary -j .text injector.o nexus_su.bin
 
 clean:
-	rm -f *.elf *.bin *.o
+	rm -f *.o *.bin
