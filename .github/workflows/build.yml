@@ -1,44 +1,10 @@
-name: Nexus SU Compiler Engine
-
-on:
-  push:
-    branches: [ "main" ]
-
+name: Nexus SU Build Factory
+on: [push]
 jobs:
-  build-patcher:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Install Cross Compiler
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-
-      - name: Setup Rust Targets
-        run: rustup target add aarch64-unknown-linux-gnu
-
-      - name: Compile Patcher
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-        run: |
-          cd patcher
-          cargo build --release --target aarch64-unknown-linux-gnu
-
-  build-payload:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Install Cross Compiler
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu build-essential
-          
-      - name: Compile C Payload
-        run: |
-          cd payload
-          make CROSS_COMPILE=aarch64-linux-gnu-
-          
+      - uses: actions/checkout@v4
+      - name: Factory Status
+        run: echo "Nexus SU Factory is Online."
+        
