@@ -1,1 +1,9 @@
-/target
+*.o
+*.ko
+*.mod.c
+*.order
+*.symvers
+*.tmp_versions
+*.apk
+build/
+.gradle/
