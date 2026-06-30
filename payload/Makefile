@@ -1,6 +1,7 @@
 CC = $(CROSS_COMPILE)gcc
 OBJCOPY = $(CROSS_COMPILE)objcopy
-CFLAGS = -Wall -O2 -nostdlib -fforce-mem -fno-stack-protector -fPIC
+# Removed the deprecated -fforce-mem flag
+CFLAGS = -Wall -O2 -nostdlib -fno-stack-protector -fPIC
 
 all: nexus_su.bin
 
