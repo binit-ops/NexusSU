@@ -11,16 +11,20 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Rust Targets
+      - name: Install Cross Compiler
         run: |
-          rustup target add aarch64-unknown-linux-gnu
-          rustup target add aarch64-linux-android
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Setup Rust Targets
+        run: rustup target add aarch64-unknown-linux-gnu
 
       - name: Compile Patcher
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
         run: |
           cd patcher
           cargo build --release --target aarch64-unknown-linux-gnu
-          cargo build --release --target aarch64-linux-android
 
   build-payload:
     runs-on: ubuntu-latest
