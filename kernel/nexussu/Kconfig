@@ -1,0 +1,3 @@
+config NEXUSSU
+    bool "NexusSU Core"
+    default y
