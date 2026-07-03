@@ -23,6 +23,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.StrokeCap
+import androidx.compose.ui.graphics.drawscope.StrokeJoin
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -81,6 +83,17 @@ fun HomeIcon(tint: Color, modifier: Modifier = Modifier) {
         drawPath(roof, tint, style = stroke)
         drawRoundRect(tint, topLeft = Offset(w * 0.27f, h * 0.45f), size = Size(w * 0.46f, h * 0.43f),
             cornerRadius = CornerRadius(2.dp.toPx()), style = stroke)
+    }
+}
+
+@Composable
+fun LogIcon(tint: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(19.dp)) {
+        val w = size.width; val h = size.height
+        val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        drawRoundRect(tint, topLeft = Offset(w * 0.15f, h * 0.1f), size = Size(w * 0.7f, h * 0.8f), cornerRadius = CornerRadius(3.dp.toPx()), style = stroke)
+        drawLine(tint, Offset(w * 0.35f, h * 0.35f), Offset(w * 0.65f, h * 0.35f), strokeWidth = 1.6.dp.toPx(), cap = StrokeCap.Round)
+        drawLine(tint, Offset(w * 0.35f, h * 0.55f), Offset(w * 0.65f, h * 0.55f), strokeWidth = 1.6.dp.toPx(), cap = StrokeCap.Round)
     }
 }
 
@@ -186,7 +199,7 @@ fun RootLens(modifier: Modifier = Modifier) {
 }
 
 // ---------- Bottom nav with sliding indicator ----------
-enum class Tab { Home, Superuser, Module }
+enum class Tab { Home, Log, Superuser, Module }
 
 @Composable
 fun LiquidTabBar(selected: Tab, onSelect: (Tab) -> Unit, modifier: Modifier = Modifier) {
@@ -197,13 +210,12 @@ fun LiquidTabBar(selected: Tab, onSelect: (Tab) -> Unit, modifier: Modifier = Mo
             val indicatorOffset by animateDpAsState(tabWidth * Tab.entries.indexOf(selected),
                 spring(dampingRatio = 0.75f, stiffness = 300f), label = "indicator")
             
-            // The animated blue pill
             Box(
                 Modifier
                     .offset(x = indicatorOffset)
                     .width(tabWidth)
                     .fillMaxHeight()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .padding(horizontal = 10.dp, vertical = 12.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(Brush.linearGradient(listOf(p.accent, p.accent2)))
                     .alpha(0.25f)
@@ -220,11 +232,12 @@ fun LiquidTabBar(selected: Tab, onSelect: (Tab) -> Unit, modifier: Modifier = Mo
                     ) {
                         when (tab) {
                             Tab.Home -> HomeIcon(color)
+                            Tab.Log -> LogIcon(color)
                             Tab.Superuser -> ShieldIcon(color)
                             Tab.Module -> ModuleIcon(color)
                         }
                         Spacer(Modifier.height(4.dp))
-                        Text(tab.name, color = color, fontSize = 10.sp, fontWeight = if (tab == selected) FontWeight.SemiBold else FontWeight.Normal)
+                        Text(tab.name, color = color, fontSize = 9.sp, fontWeight = if (tab == selected) FontWeight.SemiBold else FontWeight.Normal)
                     }
                 }
             }
