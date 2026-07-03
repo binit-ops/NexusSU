@@ -1,26 +1,26 @@
 package com.nexussu.manager.ui
 
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.os.Build
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Divider
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,9 +28,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 // ---------- Home ----------
 @Composable
@@ -101,28 +105,80 @@ fun SectionLabel(text: String) {
 }
 
 // ---------- Superuser ----------
-data class GrantedApp(val initial: String, val name: String, val sub: String, val chip: String, val chipOn: Boolean, val toggledOn: Boolean)
+data class GrantedApp(
+    val packageName: String,
+    val initial: String,
+    val name: String,
+    val isSystem: Boolean,
+    val excludeMod: Boolean,
+    val toggledOn: Boolean
+)
 
 @Composable
 fun SuperuserScreen() {
     val p = LocalNexusPalette.current
-    var scope by remember { mutableStateOf(1) }
+    val context = LocalContext.current
     
-    val apps = remember {
-        mutableStateListOf(
-            GrantedApp("S", "System Apps", "Exclude modifications", "Active", true, true),
-            GrantedApp("U", "User Apps", "Exclude modifications", "Active", true, true)
-        )
+    val apps = remember { mutableStateListOf<GrantedApp>() }
+    var showSystem by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    // Fetch the actual installed apps from the Android system
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            val pm = context.packageManager
+            val installed = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            val appList = installed.mapNotNull { info ->
+                val name = pm.getApplicationLabel(info).toString()
+                if (name.isBlank() || name == info.packageName) return@mapNotNull null
+                val isSystem = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                GrantedApp(
+                    packageName = info.packageName,
+                    initial = name.take(1).uppercase(),
+                    name = name,
+                    isSystem = isSystem,
+                    excludeMod = false,
+                    toggledOn = false
+                )
+            }.sortedBy { it.name.lowercase() }
+            
+            withContext(Dispatchers.Main) {
+                apps.clear()
+                apps.addAll(appList)
+                isLoading = false
+            }
+        }
     }
-    
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+
+    val filteredApps = apps.filter { it.isSystem == showSystem }
+
+    Column(Modifier.fillMaxSize()) {
         Text("Superuser", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-        GlassSegmented(listOf("Minimal", "Standard", "Full"), scope, onSelect = { scope = it })
-        GlassCard {
-            Column {
-                apps.forEachIndexed { index, app ->
-                    AppRow(app) { checked -> apps[index] = app.copy(toggledOn = checked) }
-                    if (index < apps.lastIndex) Divider(color = p.glassEdge, thickness = 0.5.dp)
+        Spacer(Modifier.height(14.dp))
+        GlassSegmented(listOf("User Apps", "System Apps"), if (showSystem) 1 else 0, onSelect = { showSystem = it == 1 })
+        Spacer(Modifier.height(14.dp))
+        
+        GlassCard(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            if (isLoading) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Scanning installed apps...", color = p.dim, fontSize = 13.sp, fontFamily = MonoFont)
+                }
+            } else {
+                LazyColumn(Modifier.fillMaxSize()) {
+                    itemsIndexed(filteredApps, key = { _, app -> app.packageName }) { index, app ->
+                        AppRow(
+                            app = app,
+                            onToggleRoot = { checked -> 
+                                val idx = apps.indexOf(app)
+                                if (idx >= 0) apps[idx] = app.copy(toggledOn = checked)
+                            },
+                            onToggleExclude = { checked ->
+                                val idx = apps.indexOf(app)
+                                if (idx >= 0) apps[idx] = app.copy(excludeMod = checked)
+                            }
+                        )
+                        if (index < filteredApps.lastIndex) Divider(color = p.glassEdge, thickness = 0.5.dp)
+                    }
                 }
             }
         }
@@ -130,22 +186,39 @@ fun SuperuserScreen() {
 }
 
 @Composable
-fun AppRow(app: GrantedApp, onToggle: (Boolean) -> Unit) {
+fun AppRow(app: GrantedApp, onToggleRoot: (Boolean) -> Unit, onToggleExclude: (Boolean) -> Unit) {
     val p = LocalNexusPalette.current
-    Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        val bg = if (app.chipOn) Brush.linearGradient(listOf(p.accent, p.accent2)) else Brush.linearGradient(listOf(Color(0xFF3A4050), Color(0xFF20232C)))
-        Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(bg), contentAlignment = Alignment.Center) {
-            Text(app.initial, color = if (app.chipOn) Color(0xFF0A0E14) else p.dim, fontWeight = FontWeight.SemiBold)
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, indication = null) { expanded = !expanded }) {
+        Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            val bg = if (app.toggledOn) Brush.linearGradient(listOf(p.accent, p.accent2)) else Brush.linearGradient(listOf(Color(0xFF3A4050), Color(0xFF20232C)))
+            Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(bg), contentAlignment = Alignment.Center) {
+                Text(app.initial, color = if (app.toggledOn) Color(0xFF0A0E14) else p.dim, fontWeight = FontWeight.SemiBold)
+            }
+            Column(Modifier.weight(1f)) {
+                Text(app.name, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(app.packageName, color = p.dim, fontSize = 9.sp, fontFamily = MonoFont, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            
+            if (app.excludeMod) {
+                Text("EXCLUDED", color = p.accent2, fontSize = 9.sp, fontFamily = MonoFont, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.border(1.dp, p.accent2.copy(alpha=0.5f), RoundedCornerShape(20.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
+            }
+            
+            GlassToggle(app.toggledOn, { onToggleRoot(it) })
         }
-        Column(Modifier.weight(1f)) {
-            Text(app.name, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
-            Text(app.sub, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
+        
+        // Tap the row to expand the Exclude Modifications menu
+        AnimatedVisibility(expanded, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+            Row(Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.03f)).padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column {
+                    Text("Exclude Modifications", color = p.ink, fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
+                    Text("Hide root and SUSFS from this app", color = p.dim, fontSize = 10.sp, fontFamily = MonoFont)
+                }
+                GlassToggle(app.excludeMod, { onToggleExclude(it) })
+            }
         }
-        Text(
-            app.chip, color = if (app.chipOn) p.accent else p.dim.copy(alpha = 0.6f), fontSize = 10.sp, fontFamily = MonoFont,
-            modifier = Modifier.border(1.dp, if (app.chipOn) p.accent else p.glassEdge, RoundedCornerShape(20.dp)).padding(horizontal = 8.dp, vertical = 3.dp)
-        )
-        GlassToggle(app.toggledOn, onToggle)
     }
 }
 
