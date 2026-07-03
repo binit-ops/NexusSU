@@ -85,6 +85,7 @@ fun NexusSUApp(
                         when (state) {
                             "settings" -> SettingsScreen(darkTheme, onDarkThemeChange, accent, onAccentChange) { showSettings = false }
                             "Home" -> HomeScreen(onOpenAdvanced = { showSettings = true })
+                            "Log" -> LogScreen()
                             "Superuser" -> SuperuserScreen()
                             else -> ModuleScreen()
                         }
