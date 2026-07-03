@@ -1,5 +1,6 @@
 package com.nexussu.manager
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -25,7 +26,6 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nexussu.manager.ui.*
-import androidx.compose.runtime.CompositionLocalProvider
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 
@@ -33,6 +33,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Force the OS to unlock the highest supported refresh rate natively
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            display?.supportedModes?.maxByOrNull { it.refreshRate }?.let { maxMode ->
+                window.attributes = window.attributes.apply {
+                    preferredDisplayModeId = maxMode.modeId
+                }
+            }
+        }
+
         setContent {
             var darkTheme by remember { mutableStateOf(true) }
             var accent by remember { mutableStateOf(AccentTheme.Nexus) }
