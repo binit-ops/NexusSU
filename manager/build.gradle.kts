@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose") // Applying the new Kotlin 2.0+ Compose compiler
 }
 
 android {
@@ -16,7 +17,7 @@ android {
     }
 
     buildFeatures { compose = true }
-    composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
+    // Note: composeOptions is intentionally removed here, it's no longer needed in Kotlin 2.0+
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
