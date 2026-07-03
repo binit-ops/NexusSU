@@ -6,8 +6,11 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
+import dev.chrisbanes.haze.HazeState
 
 val MonoFont = FontFamily.Monospace
+
+val LocalHazeState = staticCompositionLocalOf<HazeState?> { null }
 
 enum class AccentTheme(val accent: Color, val accent2: Color) {
     Nexus(Color(0xFF5B8CFF), Color(0xFF8A5CFF)),
