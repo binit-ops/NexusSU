@@ -56,14 +56,15 @@ fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
         Column(Modifier.padding(14.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column {
-                    Text("RMX2151 · Android 15", color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
-                    Text("kernel 5.4.x-nexus", color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
+                    Text("Realme 10 Pro 5G (luigi)", color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
+                    Text("Build: RMX3660_15.0.0.910", color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
                 }
                 val rotation by animateFloatAsState(if (expanded) 90f else 0f, label = "chevron")
                 Box(Modifier.rotate(rotation)) { ChevronIcon(tint = p.dim) }
             }
             AnimatedVisibility(expanded, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
                 Column(Modifier.padding(top = 12.dp)) {
+                    KeyValueRow("Kernel", "5.4.x-nexus")
                     KeyValueRow("SUSFS", "v1.5.2")
                     KeyValueRow("SELinux", "Enforcing")
                     KeyValueRow("Verified boot", "green")
@@ -109,7 +110,8 @@ fun SuperuserScreen() {
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Superuser", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-        GlassSegmented(listOf("Minimal", "Standard", "Full"), scope) { scope = it }
+        // Fixed trailing lambda syntax
+        GlassSegmented(listOf("Minimal", "Standard", "Full"), scope, onSelect = { scope = it })
         GlassCard {
             Column {
                 apps.forEachIndexed { index, app ->
@@ -167,7 +169,8 @@ fun ModuleScreen() {
                             Text(m.name, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
                             Text(m.desc, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
                         }
-                        GlassToggle(m.enabled) { checked -> modules[i] = m.copy(enabled = checked) }
+                        // Fixed trailing lambda syntax
+                        GlassToggle(m.enabled, onCheckedChange = { checked -> modules[i] = m.copy(enabled = checked) })
                     }
                     if (i < modules.lastIndex) Divider(color = p.glassEdge, thickness = 0.5.dp)
                 }
@@ -201,7 +204,8 @@ fun SettingsScreen(
         }
 
         SectionLabel("Appearance")
-        GlassSegmented(listOf("Light", "Dark"), if (darkTheme) 1 else 0) { onDarkThemeChange(it == 1) }
+        // Fixed trailing lambda syntax
+        GlassSegmented(listOf("Light", "Dark"), if (darkTheme) 1 else 0, onSelect = { onDarkThemeChange(it == 1) })
         GlassCard {
             Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 AccentTheme.entries.forEach { theme ->
@@ -222,15 +226,6 @@ fun SettingsScreen(
                 BehaviorToggle("Capability scoping", "Grant specific caps, not full root")
                 Divider(color = p.glassEdge, thickness = 0.5.dp)
                 BehaviorToggle("New-request alerts", "Notify on first-time su requests")
-            }
-        }
-
-        SectionLabel("Advanced")
-        GlassCard {
-            Column(Modifier.padding(14.dp)) {
-                KeyValueRow("Kernel", "5.4.x-nexus")
-                KeyValueRow("SUSFS", "v1.5.2")
-                KeyValueRow("Verified boot", "green")
             }
         }
     }
