@@ -154,17 +154,18 @@ fun SuperuserScreen() {
         withContext(Dispatchers.IO) {
             val pm = context.packageManager
             val installed = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-            val myPackageName = context.packageName // Get NexusSU's own package name
+            val myPackageName = context.packageName
 
             val appList = installed.mapNotNull { info ->
-                // 1. Completely hide NexusSU from the list
                 if (info.packageName == myPackageName) return@mapNotNull null
 
                 val name = pm.getApplicationLabel(info).toString()
                 if (name.isBlank() || name == info.packageName) return@mapNotNull null
                 
-                // 2. Strict check to separate Third-Party vs System Apps
-                val isSystem = (info.flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)) != 0
+                // Bulletproof System vs User App logic
+                val isBaseSystemApp = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                val isUpdatedSystemApp = (info.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
+                val isSystem = isBaseSystemApp || isUpdatedSystemApp
                 
                 val icon = pm.getApplicationIcon(info)
                 GrantedApp(
