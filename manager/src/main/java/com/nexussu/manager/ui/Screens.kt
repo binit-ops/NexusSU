@@ -44,10 +44,13 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-// Convert Native App Icon to Jetpack Compose Image
+// Convert Native App Icon to Jetpack Compose Image (Fixed Kotlin Smart Cast)
 fun Drawable.toImageBitmap(): androidx.compose.ui.graphics.ImageBitmap {
-    if (this is BitmapDrawable && this.bitmap != null) {
-        return this.bitmap.asImageBitmap()
+    if (this is BitmapDrawable) {
+        val bmp = this.bitmap
+        if (bmp != null) {
+            return bmp.asImageBitmap()
+        }
     }
     val bitmap = Bitmap.createBitmap(
         if (intrinsicWidth > 0) intrinsicWidth else 96,
@@ -255,7 +258,7 @@ fun AppRow(app: GrantedApp, onToggleRoot: (Boolean) -> Unit, onToggleExclude: (B
             
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("ROOT", color = if (app.toggledOn) p.accent else p.dim, fontSize = 9.sp, fontFamily = MonoFont, fontWeight = FontWeight.Bold)
-                GlassToggle(app.toggledOn, { onToggleRoot(it) })
+                GlassToggle(app.toggledOn, onCheckedChange = { onToggleRoot(it) })
             }
         }
         
@@ -270,7 +273,7 @@ fun AppRow(app: GrantedApp, onToggleRoot: (Boolean) -> Unit, onToggleExclude: (B
                     Text("Exclude Modifications", color = p.ink, fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
                     Text("Hide root and SUSFS from this app", color = p.dim, fontSize = 10.sp, fontFamily = MonoFont)
                 }
-                GlassToggle(app.excludeMod, { onToggleExclude(it) })
+                GlassToggle(app.excludeMod, onCheckedChange = { onToggleExclude(it) })
             }
         }
     }
@@ -390,6 +393,6 @@ fun BehaviorToggle(title: String, subtitle: String) {
             Text(title, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
             Text(subtitle, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
         }
-        GlassToggle(checked, { checked = it })
+        GlassToggle(checked, onCheckedChange = { checked = it })
     }
 }
