@@ -16,6 +16,9 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
+      - name: Generate Gradle Wrapper
+        run: gradle wrapper --gradle-version 8.5
+
       - name: Grant Execute Permission for Gradle
         run: chmod +x gradlew
 
