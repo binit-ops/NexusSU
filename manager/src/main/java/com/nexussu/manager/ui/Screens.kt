@@ -2,9 +2,13 @@ package com.nexussu.manager.ui
 
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import android.os.Build
 import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,6 +19,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Divider
@@ -28,13 +33,32 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+// Convert Native App Icon to Jetpack Compose Image
+fun Drawable.toImageBitmap(): androidx.compose.ui.graphics.ImageBitmap {
+    if (this is BitmapDrawable && this.bitmap != null) {
+        return this.bitmap.asImageBitmap()
+    }
+    val bitmap = Bitmap.createBitmap(
+        if (intrinsicWidth > 0) intrinsicWidth else 96,
+        if (intrinsicHeight > 0) intrinsicHeight else 96,
+        Bitmap.Config.ARGB_8888
+    )
+    val canvas = android.graphics.Canvas(bitmap)
+    setBounds(0, 0, canvas.width, canvas.height)
+    draw(canvas)
+    return bitmap.asImageBitmap()
+}
 
 // ---------- Home ----------
 @Composable
@@ -55,7 +79,6 @@ fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
     val p = LocalNexusPalette.current
     var expanded by remember { mutableStateOf(false) }
 
-    // Fetch real device data dynamically from the Android OS
     val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
     val model = Build.MODEL
     val deviceName = "$manufacturer $model"
@@ -107,8 +130,8 @@ fun SectionLabel(text: String) {
 // ---------- Superuser ----------
 data class GrantedApp(
     val packageName: String,
-    val initial: String,
     val name: String,
+    val icon: Drawable,
     val isSystem: Boolean,
     val excludeMod: Boolean,
     val toggledOn: Boolean
@@ -122,8 +145,8 @@ fun SuperuserScreen() {
     val apps = remember { mutableStateListOf<GrantedApp>() }
     var showSystem by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(true) }
+    var searchQuery by remember { mutableStateOf("") }
 
-    // Fetch the actual installed apps from the Android system
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             val pm = context.packageManager
@@ -132,10 +155,11 @@ fun SuperuserScreen() {
                 val name = pm.getApplicationLabel(info).toString()
                 if (name.isBlank() || name == info.packageName) return@mapNotNull null
                 val isSystem = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                val icon = pm.getApplicationIcon(info)
                 GrantedApp(
                     packageName = info.packageName,
-                    initial = name.take(1).uppercase(),
                     name = name,
+                    icon = icon,
                     isSystem = isSystem,
                     excludeMod = false,
                     toggledOn = false
@@ -150,10 +174,34 @@ fun SuperuserScreen() {
         }
     }
 
-    val filteredApps = apps.filter { it.isSystem == showSystem }
+    val filteredApps = apps.filter { 
+        it.isSystem == showSystem && it.name.contains(searchQuery, ignoreCase = true)
+    }
 
     Column(Modifier.fillMaxSize()) {
         Text("Superuser", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(14.dp))
+        
+        // Search Bar
+        GlassCard(modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(16.dp)) {
+            BasicTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                textStyle = TextStyle(color = p.ink, fontSize = 14.sp),
+                cursorBrush = SolidColor(p.accent),
+                modifier = Modifier.fillMaxSize(),
+                singleLine = true,
+                decorationBox = { innerTextField ->
+                    Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.weight(1f)) {
+                            if (searchQuery.isEmpty()) Text("Search apps...", color = p.dim, fontSize = 14.sp)
+                            innerTextField()
+                        }
+                    }
+                }
+            )
+        }
+        
         Spacer(Modifier.height(14.dp))
         GlassSegmented(listOf("User Apps", "System Apps"), if (showSystem) 1 else 0, onSelect = { showSystem = it == 1 })
         Spacer(Modifier.height(14.dp))
@@ -188,18 +236,18 @@ fun SuperuserScreen() {
 @Composable
 fun AppRow(app: GrantedApp, onToggleRoot: (Boolean) -> Unit, onToggleExclude: (Boolean) -> Unit) {
     val p = LocalNexusPalette.current
+    var expanded by remember { mutableStateOf(false) }
 
-    Column(Modifier.fillMaxWidth()) {
-        // Top Part: App Info & Root Toggle
+    Column(Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, indication = null) { expanded = !expanded }) {
         Row(
-            Modifier.fillMaxWidth().padding(start = 13.dp, end = 13.dp, top = 13.dp, bottom = 8.dp), 
+            Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 13.dp), 
             verticalAlignment = Alignment.CenterVertically, 
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            val bg = if (app.toggledOn) Brush.linearGradient(listOf(p.accent, p.accent2)) else Brush.linearGradient(listOf(Color(0xFF3A4050), Color(0xFF20232C)))
-            Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(bg), contentAlignment = Alignment.Center) {
-                Text(app.initial, color = if (app.toggledOn) Color(0xFF0A0E14) else p.dim, fontWeight = FontWeight.SemiBold)
-            }
+            // Render Real App Icon
+            val imageBitmap = remember(app.icon) { app.icon.toImageBitmap() }
+            Image(bitmap = imageBitmap, contentDescription = null, modifier = Modifier.size(38.dp).clip(RoundedCornerShape(8.dp)))
+            
             Column(Modifier.weight(1f)) {
                 Text(app.name, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(app.packageName, color = p.dim, fontSize = 9.sp, fontFamily = MonoFont, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -211,17 +259,33 @@ fun AppRow(app: GrantedApp, onToggleRoot: (Boolean) -> Unit, onToggleExclude: (B
             }
         }
         
-        // Bottom Part: Exclude Toggle (Permanently visible now)
-        Row(
-            Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.03f)).padding(horizontal = 16.dp, vertical = 10.dp), 
-            horizontalArrangement = Arrangement.SpaceBetween, 
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text("Exclude Modifications", color = p.ink, fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
-                Text("Hide root and SUSFS from this app", color = p.dim, fontSize = 10.sp, fontFamily = MonoFont)
+        // Tap to expand Exclude Modifications
+        AnimatedVisibility(expanded, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+            Row(
+                Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.03f)).padding(horizontal = 16.dp, vertical = 12.dp), 
+                horizontalArrangement = Arrangement.SpaceBetween, 
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("Exclude Modifications", color = p.ink, fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
+                    Text("Hide root and SUSFS from this app", color = p.dim, fontSize = 10.sp, fontFamily = MonoFont)
+                }
+                GlassToggle(app.excludeMod, { onToggleExclude(it) })
             }
-            GlassToggle(app.excludeMod, { onToggleExclude(it) })
+        }
+    }
+}
+
+// ---------- Log ----------
+@Composable
+fun LogScreen() {
+    val p = LocalNexusPalette.current
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text("Logs", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        GlassCard {
+            Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                Text("No logs recorded yet", color = p.dim, fontSize = 13.sp, fontFamily = MonoFont)
+            }
         }
     }
 }
