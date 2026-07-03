@@ -188,10 +188,14 @@ fun SuperuserScreen() {
 @Composable
 fun AppRow(app: GrantedApp, onToggleRoot: (Boolean) -> Unit, onToggleExclude: (Boolean) -> Unit) {
     val p = LocalNexusPalette.current
-    var expanded by remember { mutableStateOf(false) }
 
-    Column(Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, indication = null) { expanded = !expanded }) {
-        Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxWidth()) {
+        // Top Part: App Info & Root Toggle
+        Row(
+            Modifier.fillMaxWidth().padding(start = 13.dp, end = 13.dp, top = 13.dp, bottom = 8.dp), 
+            verticalAlignment = Alignment.CenterVertically, 
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             val bg = if (app.toggledOn) Brush.linearGradient(listOf(p.accent, p.accent2)) else Brush.linearGradient(listOf(Color(0xFF3A4050), Color(0xFF20232C)))
             Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(bg), contentAlignment = Alignment.Center) {
                 Text(app.initial, color = if (app.toggledOn) Color(0xFF0A0E14) else p.dim, fontWeight = FontWeight.SemiBold)
@@ -201,23 +205,23 @@ fun AppRow(app: GrantedApp, onToggleRoot: (Boolean) -> Unit, onToggleExclude: (B
                 Text(app.packageName, color = p.dim, fontSize = 9.sp, fontFamily = MonoFont, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             
-            if (app.excludeMod) {
-                Text("EXCLUDED", color = p.accent2, fontSize = 9.sp, fontFamily = MonoFont, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.border(1.dp, p.accent2.copy(alpha=0.5f), RoundedCornerShape(20.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("ROOT", color = if (app.toggledOn) p.accent else p.dim, fontSize = 9.sp, fontFamily = MonoFont, fontWeight = FontWeight.Bold)
+                GlassToggle(app.toggledOn, { onToggleRoot(it) })
             }
-            
-            GlassToggle(app.toggledOn, { onToggleRoot(it) })
         }
         
-        // Tap the row to expand the Exclude Modifications menu
-        AnimatedVisibility(expanded, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
-            Row(Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.03f)).padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column {
-                    Text("Exclude Modifications", color = p.ink, fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
-                    Text("Hide root and SUSFS from this app", color = p.dim, fontSize = 10.sp, fontFamily = MonoFont)
-                }
-                GlassToggle(app.excludeMod, { onToggleExclude(it) })
+        // Bottom Part: Exclude Toggle (Permanently visible now)
+        Row(
+            Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.03f)).padding(horizontal = 16.dp, vertical = 10.dp), 
+            horizontalArrangement = Arrangement.SpaceBetween, 
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text("Exclude Modifications", color = p.ink, fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
+                Text("Hide root and SUSFS from this app", color = p.dim, fontSize = 10.sp, fontFamily = MonoFont)
             }
+            GlassToggle(app.excludeMod, { onToggleExclude(it) })
         }
     }
 }
