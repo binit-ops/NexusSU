@@ -69,7 +69,7 @@ fun GlassCard(
     }
 }
 
-// ---------- Hand-drawn icons (no icon-library dependency) ----------
+// ---------- Hand-drawn icons ----------
 @Composable
 fun HomeIcon(tint: Color, modifier: Modifier = Modifier) {
     Canvas(modifier.size(19.dp)) {
@@ -139,7 +139,7 @@ fun ChevronIcon(tint: Color, modifier: Modifier = Modifier) {
     }
 }
 
-// ---------- Root Lens: the signature element ----------
+// ---------- Root Lens ----------
 @Composable
 fun RootLens(modifier: Modifier = Modifier) {
     val p = LocalNexusPalette.current
@@ -191,17 +191,24 @@ enum class Tab { Home, Superuser, Module }
 @Composable
 fun LiquidTabBar(selected: Tab, onSelect: (Tab) -> Unit, modifier: Modifier = Modifier) {
     val p = LocalNexusPalette.current
-    GlassCard(modifier.height(64.dp)) {
-        BoxWithConstraints(Modifier.fillMaxSize().padding(6.dp)) {
+    GlassCard(modifier.height(72.dp)) {
+        BoxWithConstraints(Modifier.fillMaxSize()) {
             val tabWidth = maxWidth / Tab.entries.size
             val indicatorOffset by animateDpAsState(tabWidth * Tab.entries.indexOf(selected),
                 spring(dampingRatio = 0.75f, stiffness = 300f), label = "indicator")
+            
+            // The animated blue pill
             Box(
-                Modifier.offset(x = indicatorOffset).width(tabWidth).fillMaxHeight().padding(4.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                Modifier
+                    .offset(x = indicatorOffset)
+                    .width(tabWidth)
+                    .fillMaxHeight()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .clip(RoundedCornerShape(20.dp))
                     .background(Brush.linearGradient(listOf(p.accent, p.accent2)))
-                    .alpha(0.18f)
+                    .alpha(0.25f)
             )
+            
             Row(Modifier.fillMaxSize()) {
                 Tab.entries.forEach { tab ->
                     val color = if (tab == selected) p.accent else p.dim
@@ -216,7 +223,8 @@ fun LiquidTabBar(selected: Tab, onSelect: (Tab) -> Unit, modifier: Modifier = Mo
                             Tab.Superuser -> ShieldIcon(color)
                             Tab.Module -> ModuleIcon(color)
                         }
-                        Text(tab.name, color = color, fontSize = 9.5.sp)
+                        Spacer(Modifier.height(4.dp))
+                        Text(tab.name, color = color, fontSize = 10.sp, fontWeight = if (tab == selected) FontWeight.SemiBold else FontWeight.Normal)
                     }
                 }
             }
