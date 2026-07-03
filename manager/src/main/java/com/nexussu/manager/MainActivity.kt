@@ -25,6 +25,9 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nexussu.manager.ui.*
+import androidx.compose.runtime.CompositionLocalProvider
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,44 +49,52 @@ fun NexusSUApp(
     accent: AccentTheme, onAccentChange: (AccentTheme) -> Unit
 ) {
     val p = LocalNexusPalette.current
+    val hazeState = rememberHazeState()
     var tab by remember { mutableStateOf(Tab.Home) }
     var showSettings by remember { mutableStateOf(false) }
 
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(p.void, p.voidGradientEnd)))) {
-        LiquidBlobs()
-        Column(Modifier.fillMaxSize().padding(16.dp)) {
-            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(buildAnnotatedString {
-                    withStyle(SpanStyle(color = p.ink)) { append("Nexus") }
-                    withStyle(SpanStyle(color = p.accent)) { append("SU") }
-                }, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-                Box(
-                    Modifier.size(34.dp).clip(CircleShape).background(p.glassFill)
-                        .clickable(remember { MutableInteractionSource() }, indication = null) { showSettings = true },
-                    contentAlignment = Alignment.Center
-                ) { SettingsIcon(tint = p.ink) }
-            }
+    CompositionLocalProvider(LocalHazeState provides hazeState) {
+        Box(Modifier.fillMaxSize()) {
+            Box(
+                Modifier.fillMaxSize()
+                    .background(Brush.verticalGradient(listOf(p.void, p.voidGradientEnd)))
+                    .hazeSource(state = hazeState)
+            ) { LiquidBlobs() }
 
-            Box(Modifier.weight(1f)) {
-                AnimatedContent(
-                    targetState = if (showSettings) "settings" else tab.name,
-                    transitionSpec = {
-                        (fadeIn() + slideInVertically { it / 8 }) togetherWith (fadeOut() + slideOutVertically { -it / 8 })
-                    },
-                    label = "screen"
-                ) { state ->
-                    when (state) {
-                        "settings" -> SettingsScreen(darkTheme, onDarkThemeChange, accent, onAccentChange) { showSettings = false }
-                        "Home" -> HomeScreen(onOpenAdvanced = { showSettings = true })
-                        "Superuser" -> SuperuserScreen()
-                        else -> ModuleScreen()
+            Column(Modifier.fillMaxSize().padding(16.dp)) {
+                Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text(buildAnnotatedString {
+                        withStyle(SpanStyle(color = p.ink)) { append("Nexus") }
+                        withStyle(SpanStyle(color = p.accent)) { append("SU") }
+                    }, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                    Box(
+                        Modifier.size(34.dp).clip(CircleShape).background(p.glassFill)
+                            .clickable(remember { MutableInteractionSource() }, indication = null) { showSettings = true },
+                        contentAlignment = Alignment.Center
+                    ) { SettingsIcon(tint = p.ink) }
+                }
+
+                Box(Modifier.weight(1f)) {
+                    AnimatedContent(
+                        targetState = if (showSettings) "settings" else tab.name,
+                        transitionSpec = {
+                            (fadeIn() + slideInVertically { it / 8 }) togetherWith (fadeOut() + slideOutVertically { -it / 8 })
+                        },
+                        label = "screen"
+                    ) { state ->
+                        when (state) {
+                            "settings" -> SettingsScreen(darkTheme, onDarkThemeChange, accent, onAccentChange) { showSettings = false }
+                            "Home" -> HomeScreen(onOpenAdvanced = { showSettings = true })
+                            "Superuser" -> SuperuserScreen()
+                            else -> ModuleScreen()
+                        }
                     }
                 }
-            }
 
-            if (!showSettings) {
-                Spacer(Modifier.height(12.dp))
-                LiquidTabBar(selected = tab, onSelect = { tab = it })
+                if (!showSettings) {
+                    Spacer(Modifier.height(12.dp))
+                    LiquidTabBar(selected = tab, onSelect = { tab = it })
+                }
             }
         }
     }
