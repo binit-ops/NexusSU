@@ -44,7 +44,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-// Convert Native App Icon to Jetpack Compose Image (Fixed Kotlin Smart Cast)
+// Convert Native App Icon to Jetpack Compose Image
 fun Drawable.toImageBitmap(): androidx.compose.ui.graphics.ImageBitmap {
     if (this is BitmapDrawable) {
         val bmp = this.bitmap
@@ -154,10 +154,18 @@ fun SuperuserScreen() {
         withContext(Dispatchers.IO) {
             val pm = context.packageManager
             val installed = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            val myPackageName = context.packageName // Get NexusSU's own package name
+
             val appList = installed.mapNotNull { info ->
+                // 1. Completely hide NexusSU from the list
+                if (info.packageName == myPackageName) return@mapNotNull null
+
                 val name = pm.getApplicationLabel(info).toString()
                 if (name.isBlank() || name == info.packageName) return@mapNotNull null
-                val isSystem = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                
+                // 2. Strict check to separate Third-Party vs System Apps
+                val isSystem = (info.flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)) != 0
+                
                 val icon = pm.getApplicationIcon(info)
                 GrantedApp(
                     packageName = info.packageName,
@@ -247,7 +255,6 @@ fun AppRow(app: GrantedApp, onToggleRoot: (Boolean) -> Unit, onToggleExclude: (B
             verticalAlignment = Alignment.CenterVertically, 
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Render Real App Icon
             val imageBitmap = remember(app.icon) { app.icon.toImageBitmap() }
             Image(bitmap = imageBitmap, contentDescription = null, modifier = Modifier.size(38.dp).clip(RoundedCornerShape(8.dp)))
             
@@ -262,7 +269,6 @@ fun AppRow(app: GrantedApp, onToggleRoot: (Boolean) -> Unit, onToggleExclude: (B
             }
         }
         
-        // Tap to expand Exclude Modifications
         AnimatedVisibility(expanded, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
             Row(
                 Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.03f)).padding(horizontal = 16.dp, vertical = 12.dp), 
