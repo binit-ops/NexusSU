@@ -1,5 +1,6 @@
 package com.nexussu.manager.ui
 
+import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -39,7 +40,7 @@ fun HomeScreen(onOpenAdvanced: () -> Unit) {
         Column(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             RootLens()
             Spacer(Modifier.height(12.dp))
-            Text("3 apps granted · 3 modules active", color = p.dim, fontSize = 11.sp, fontFamily = MonoFont)
+            Text("0 apps granted · 0 modules active", color = p.dim, fontSize = 11.sp, fontFamily = MonoFont)
         }
         DeviceCard(onOpenAdvanced = onOpenAdvanced)
     }
@@ -49,25 +50,32 @@ fun HomeScreen(onOpenAdvanced: () -> Unit) {
 fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
     val p = LocalNexusPalette.current
     var expanded by remember { mutableStateOf(false) }
+
+    // Fetch real device data dynamically from the Android OS
+    val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+    val model = Build.MODEL
+    val deviceName = "$manufacturer $model"
+    val buildDisplay = Build.DISPLAY
+
     GlassCard(
         modifier.fillMaxWidth()
             .clickable(remember { MutableInteractionSource() }, indication = null) { expanded = !expanded }
     ) {
         Column(Modifier.padding(14.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column {
-                    Text("Realme 10 Pro 5G (luigi)", color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
-                    Text("Build: RMX3660_15.0.0.910", color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
+                Column(Modifier.weight(1f)) {
+                    Text(deviceName, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
+                    Text("Build: $buildDisplay", color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
                 }
                 val rotation by animateFloatAsState(if (expanded) 90f else 0f, label = "chevron")
-                Box(Modifier.rotate(rotation)) { ChevronIcon(tint = p.dim) }
+                Box(Modifier.rotate(rotation).padding(start = 8.dp)) { ChevronIcon(tint = p.dim) }
             }
             AnimatedVisibility(expanded, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
                 Column(Modifier.padding(top = 12.dp)) {
-                    KeyValueRow("Kernel", "5.4.x-nexus")
-                    KeyValueRow("SUSFS", "v1.5.2")
-                    KeyValueRow("SELinux", "Enforcing")
-                    KeyValueRow("Verified boot", "green")
+                    KeyValueRow("Kernel", "Awaiting root shell...")
+                    KeyValueRow("SUSFS", "Awaiting root shell...")
+                    KeyValueRow("SELinux", "Awaiting root shell...")
+                    KeyValueRow("Verified boot", "Awaiting root shell...")
                     TextButton(onClick = onOpenAdvanced, contentPadding = PaddingValues(vertical = 8.dp)) {
                         Text("Advanced options →", color = p.accent, fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
                     }
@@ -99,18 +107,16 @@ data class GrantedApp(val initial: String, val name: String, val sub: String, va
 fun SuperuserScreen() {
     val p = LocalNexusPalette.current
     var scope by remember { mutableStateOf(1) }
+    
     val apps = remember {
         mutableStateListOf(
-            GrantedApp("C", "Camera Tuner", "FULL root", "10m left", true, true),
-            GrantedApp("A", "Ad Auditor", "NET", "Always", true, true),
-            GrantedApp("T", "Terminal", "FULL root", "Always", true, true),
-            GrantedApp("R", "Root Explorer", "FS", "Once", true, true),
-            GrantedApp("B", "Banking+", "—", "Denied", false, false)
+            GrantedApp("S", "System Apps", "Exclude modifications", "Active", true, true),
+            GrantedApp("U", "User Apps", "Exclude modifications", "Active", true, true)
         )
     }
+    
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Superuser", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-        // Fixed trailing lambda syntax
         GlassSegmented(listOf("Minimal", "Standard", "Full"), scope, onSelect = { scope = it })
         GlassCard {
             Column {
@@ -149,33 +155,37 @@ data class ModuleItem(val initial: String, val name: String, val desc: String, v
 @Composable
 fun ModuleScreen() {
     val p = LocalNexusPalette.current
-    val modules = remember {
-        mutableStateListOf(
-            ModuleItem("S", "SUSFS Hide", "Kernel-level artifact hiding · v1.5.2", true),
-            ModuleItem("I", "Integrity Helper", "Passes basic attestation · v3.1", true),
-            ModuleItem("B", "Busybox", "Shell utilities · v1.36", true)
-        )
-    }
+    val modules = remember { mutableStateListOf<ModuleItem>() }
+
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Modules", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-        GlassCard {
-            Column {
-                modules.forEachIndexed { i, m ->
-                    Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(Brush.linearGradient(listOf(p.accent, p.accent2))), contentAlignment = Alignment.Center) {
-                            Text(m.initial, color = Color(0xFF0A0E14), fontWeight = FontWeight.SemiBold)
+        
+        if (modules.isEmpty()) {
+            GlassCard {
+                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                    Text("No modules installed", color = p.dim, fontSize = 13.sp, fontFamily = MonoFont)
+                }
+            }
+        } else {
+            GlassCard {
+                Column {
+                    modules.forEachIndexed { i, m ->
+                        Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(Brush.linearGradient(listOf(p.accent, p.accent2))), contentAlignment = Alignment.Center) {
+                                Text(m.initial, color = Color(0xFF0A0E14), fontWeight = FontWeight.SemiBold)
+                            }
+                            Column(Modifier.weight(1f)) {
+                                Text(m.name, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
+                                Text(m.desc, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
+                            }
+                            GlassToggle(m.enabled, onCheckedChange = { checked -> modules[i] = m.copy(enabled = checked) })
                         }
-                        Column(Modifier.weight(1f)) {
-                            Text(m.name, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
-                            Text(m.desc, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
-                        }
-                        // Fixed trailing lambda syntax
-                        GlassToggle(m.enabled, onCheckedChange = { checked -> modules[i] = m.copy(enabled = checked) })
+                        if (i < modules.lastIndex) Divider(color = p.glassEdge, thickness = 0.5.dp)
                     }
-                    if (i < modules.lastIndex) Divider(color = p.glassEdge, thickness = 0.5.dp)
                 }
             }
         }
+        
         OutlinedButton(
             onClick = { /* module install flow */ },
             colors = ButtonDefaults.outlinedButtonColors(contentColor = p.dim),
@@ -204,7 +214,6 @@ fun SettingsScreen(
         }
 
         SectionLabel("Appearance")
-        // Fixed trailing lambda syntax
         GlassSegmented(listOf("Light", "Dark"), if (darkTheme) 1 else 0, onSelect = { onDarkThemeChange(it == 1) })
         GlassCard {
             Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
