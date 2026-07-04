@@ -39,10 +39,23 @@ git clone --depth=1 https://github.com/kdrag0n/proton-clang.git ~/toolchain
 git clone --depth=1 https://github.com/OEM/kernel_source.git ~/android-kernel
 cd ~/android-kernel
 
-# At this stage, inject the NexusSU C hooks into fs/exec.c, fs/readdir.c, etc.
+# At this stage, inject the NexusSU C hooks into:
+# include/linux/nexussu.h, kernel/nexussu_state.c, drivers/char/nexussu.c,
+# fs/exec.c, fs/readdir.c, fs/open.c, fs/stat.c, and fs/read_write.c
         </code></pre>
 
-        <h3 style="color: var(--accent); margin-top: 50px;">3. Cross-Compile the Kernel</h3>
+        <h3 style="color: var(--accent); margin-top: 50px;">3. Link the Makefiles</h3>
+        <p>Because we added new standalone C files for the state engine and character driver, we must instruct the kernel build system to compile them natively. Add our objects to the bottom of the Makefiles in their respective directories.</p>
+        
+        <pre><code class="language-bash">
+# Add to the bottom of kernel/Makefile
+echo "obj-y += nexussu_state.o" >> kernel/Makefile
+
+# Add to the bottom of drivers/char/Makefile
+echo "obj-y += nexussu.o" >> drivers/char/Makefile
+        </code></pre>
+
+        <h3 style="color: var(--accent); margin-top: 50px;">4. Cross-Compile the Kernel</h3>
         <p>Export your environment variables, generate the defconfig for your specific device architecture, and initiate the build sequence. Be sure to replace <code>vendor/your_device_defconfig</code> with your actual config name.</p>
         
         <pre><code class="language-bash">
@@ -64,7 +77,7 @@ make -j8 O=out \
     CROSS_COMPILE_ARM32=arm-linux-gnueabi-
         </code></pre>
 
-        <h3 style="color: var(--accent); margin-top: 50px;">4. Packing the Boot Image</h3>
+        <h3 style="color: var(--accent); margin-top: 50px;">5. Packing the Boot Image</h3>
         <p>Once compilation succeeds, the raw kernel image will be output to <code>out/arch/arm64/boot/Image.gz-dtb</code>. You must repack this into a bootable image using tools like Magiskboot or Android Image Kitchen (AIK) before flashing it via Fastboot or a secondary Bugjaeger host.</p>
         
         <pre><code class="language-bash">
