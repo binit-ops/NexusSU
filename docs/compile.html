@@ -6,13 +6,6 @@
     <title>NexusSU | Compilation Guide</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
-    <style>
-        /* Reusing the code window styles from hooks.html */
-        .code-window { background: rgba(15, 17, 21, 0.6); border: 1px solid var(--glass-border); border-radius: 12px; overflow: hidden; margin-bottom: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
-        .code-toolbar { display: flex; justify-content: space-between; align-items: center; background: rgba(255, 255, 255, 0.03); border-bottom: 1px solid var(--glass-border); padding: 12px 16px; font-size: 0.85rem; }
-        .code-actions button { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text-main); padding: 6px 12px; border-radius: 6px; cursor: pointer; }
-        .code-window pre { margin: 0 !important; border: none !important; border-radius: 0 !important; }
-    </style>
 </head>
 <body>
     <nav>
@@ -23,13 +16,13 @@
 
     <div class="content hero">
         <h1>Building the Engine</h1>
-        <p>Because legacy GKI 1.0 and pre-GKI kernels do not support universal loadable modules, the NexusSU hooks must be compiled directly into the kernel source tree.</p>
+        <p>Because legacy GKI 1.0 kernels do not support universal loadable modules, the NexusSU hooks must be compiled directly into the kernel source tree.</p>
 
-        <h3>1. Prepare the Build Environment</h3>
+        <h3>1. Prepare Environment</h3>
         <div class="code-window">
             <div class="code-toolbar">
-                <span class="file-badge">Termux / PRoot</span>
-                <button onclick="copyCode(this)">📋 Copy</button>
+                <span class="file-badge">Termux/Proot</span>
+                <div class="code-actions"><button onclick="copyCode(this)">📋 Copy</button></div>
             </div>
             <pre><code class="language-bash">
 apt update && apt upgrade -y
@@ -38,24 +31,11 @@ apt install git make bc bison build-essential zip curl flex \
             </code></pre>
         </div>
 
-        <h3>2. Fetch the Toolchain & Source</h3>
-        <div class="code-window">
-            <div class="code-toolbar">
-                <span class="file-badge">Repository Setup</span>
-                <button onclick="copyCode(this)">📋 Copy</button>
-            </div>
-            <pre><code class="language-bash">
-git clone --depth=1 https://github.com/kdrag0n/proton-clang.git ~/toolchain
-git clone --depth=1 https://github.com/OEM/kernel_source.git ~/android-kernel
-cd ~/android-kernel
-            </code></pre>
-        </div>
-
-        <h3>3. Link the Makefiles</h3>
+        <h3>2. Fetch & Link</h3>
         <div class="code-window">
             <div class="code-toolbar">
                 <span class="file-badge">Makefile Injections</span>
-                <button onclick="copyCode(this)">📋 Copy</button>
+                <div class="code-actions"><button onclick="copyCode(this)">📋 Copy</button></div>
             </div>
             <pre><code class="language-bash">
 echo "obj-y += nexussu_state.o" >> kernel/Makefile
@@ -63,32 +43,22 @@ echo "obj-y += nexussu.o" >> drivers/char/Makefile
             </code></pre>
         </div>
 
-        <h3>4. Cross-Compile</h3>
+        <h3>3. Build</h3>
         <div class="code-window">
             <div class="code-toolbar">
                 <span class="file-badge">Build Command</span>
-                <button onclick="copyCode(this)">📋 Copy</button>
+                <div class="code-actions"><button onclick="copyCode(this)">📋 Copy</button></div>
             </div>
             <pre><code class="language-bash">
 export PATH="$HOME/toolchain/bin:$PATH"
-export CROSS_COMPILE=aarch64-linux-gnu-
-export CC=clang
-export ARCH=arm64
-
 make clean && make mrproper
 make vendor/your_device_defconfig O=out
 make -j8 O=out
             </code></pre>
         </div>
-
-        <div class="alert-panel">
-            <strong>Critical Warning</strong>
-            <p>Always ensure you have a fallback method to restore your partitions. A single misaligned pointer in your source injection will cause an immediate bootloop.</p>
-        </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
     <script>
         function copyCode(btn) {
             const code = btn.closest('.code-window').querySelector('code').innerText;
