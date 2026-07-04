@@ -1,19 +1,19 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    // Your Kotlin 2.2.0 Compose Compiler setup
     id("org.jetbrains.kotlin.plugin.compose") 
 }
 
 android {
-    namespace = "coms.binitops.nexussu"
+    // CORRECTED: Aligned with your actual package structure in 164555.jpg
+    namespace = "com.nexussu.manager"
     compileSdk = 34
     
-    // 1. ADDED: NDK Version for GitHub Actions runner
     ndkVersion = "25.1.8937393"
 
     defaultConfig {
-        applicationId = "coms.binitops.nexussu"
+        // CORRECTED: Aligned with your true namespace
+        applicationId = "com.nexussu.manager"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
@@ -24,7 +24,6 @@ android {
             useSupportLibrary = true
         }
 
-        // 2. ADDED: C++ ABI and compiler flags for the JNI bridge
         externalNativeBuild {
             cmake {
                 cppFlags += "-std=c++17"
@@ -56,7 +55,6 @@ android {
         compose = true
     }
 
-    // 3. ADDED: Link to the CMake build file
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
@@ -76,14 +74,12 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.2")
     implementation("androidx.activity:activity-compose:1.9.0")
     
-    // Jetpack Compose BOM
     implementation(platform("androidx.compose:compose-bom:2024.06.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
 
-    // Your Liquid-Glass UI Dependencies
     implementation("dev.chrisbanes.haze:haze:1.7.2")
     implementation("dev.chrisbanes.haze:haze-materials:1.7.2")
 
