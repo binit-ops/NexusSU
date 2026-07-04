@@ -53,10 +53,10 @@ static inline void nexussu_escalate(void) {
 #endif /* _NEXUSSU_H */
         </code></pre>
 
-        <h3 style="color: var(--accent); margin-top: 40px;">Step 2: Execution Interception (fs/exec.c)</h3>
+        <h3 style="color: var(--accent); margin-top: 50px;">Step 2: Execution Interception (fs/exec.c)</h3>
         <p>To trigger the escalation, we inject our logic directly into the kernel's execution path. When an authorized app attempts to execute a command (like the <code>su</code> binary), the kernel intercepts it and elevates the credentials natively.</p>
         
-        <div style="background: #2a0a0a; border-left: 4px solid #ff5252; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+        <div style="background: #1a0505; border-left: 4px solid #ff5252; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
             <strong>Maintainer Warning:</strong> When injecting blocks of custom logic directly into C files like <code>fs/exec.c</code>, it will inevitably cause line numbering shifts throughout the rest of the file. A character-by-character review is required to ensure you don't break existing kernel structures or misalign compiler macros.
         </div>
 
@@ -84,6 +84,41 @@ static int do_execveat_common(int fd, struct filename *filename,
     struct linux_binprm *bprm;
     int retval;
     /* ... */
+}
+        </code></pre>
+
+        <h3 style="color: var(--accent); margin-top: 50px;">Step 3: VFS Stealth (fs/readdir.c)</h3>
+        <p>Granting root is only half the battle; hiding it is the rest. To bypass aggressive user-space anti-cheat systems, we intercept the Virtual File System's directory-reading capabilities. If a process attempts to list a directory containing our root binaries, we dynamically scrub the entries from the kernel's response buffer.</p>
+        
+        <pre><code class="language-c">
+/* 
+ * INJECTION TARGET: fs/readdir.c
+ * Hooking the 'filldir' actor to hide specific files from user-space 
+ */
+
+#include &lt;linux/nexussu.h&gt;
+#include &lt;linux/string.h&gt;
+
+/* The name of the binary we want to hide */
+#define HIDE_TARGET "su"
+
+/* 
+ * Our custom wrapper for the directory filler.
+ * It checks the name of the file being read. If it matches our target,
+ * it returns 0 (success) without actually writing the entry to the user's buffer.
+ */
+static int nexussu_filldir_hook(struct dir_context *ctx, const char *name, int namlen,
+                                loff_t offset, u64 ino, unsigned int d_type)
+{
+    /* If the file is 'su', skip it completely */
+    if (namlen == 2 && strncmp(name, HIDE_TARGET, 2) == 0) {
+        printk(KERN_DEBUG "NexusSU: Hid '%s' from directory listing\n", HIDE_TARGET);
+        return 0; 
+    }
+
+    /* Otherwise, proceed normally (you would call the original filldir here) */
+    // return original_filldir(ctx, name, namlen, offset, ino, d_type);
+    return 0;
 }
         </code></pre>
     </div>
