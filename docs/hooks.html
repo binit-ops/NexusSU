@@ -19,7 +19,7 @@
         <p>For pre-GKI kernels (4.14, 4.19, 5.4), NexusSU relies on direct source tree injection. By modifying the kernel's core execution and file system files before compilation, we achieve an embedded, undetectable root environment.</p>
 
         <!-- STEP 1 -->
-        <h3 style="color: var(--accent); margin-top: 40px;">Step 1: The Core Header (nexussu.h)</h3>
+        <h3 style="color: var(--accent); margin-top: 40px;">Step 1: The Core Header (include/linux/nexussu.h)</h3>
         <p>This header acts as the central brain. It defines the privilege escalation function that swaps the current process credentials to UID 0 (Root). This file is placed in the <code>include/linux/</code> directory of the kernel tree.</p>
         
         <pre><code class="language-c">
@@ -29,8 +29,10 @@
 #include &lt;linux/cred.h&gt;
 #include &lt;linux/uidgid.h&gt;
 
-/* Function to check if a UID is granted root via the Manager App */
+/* Function prototypes exposed by the state engine */
 extern bool nexussu_is_granted(kuid_t uid);
+extern bool nexussu_stealth_check(const char __user *filename);
+extern void nexussu_scrub_proc_buffer(struct file *file, char __user *buf, size_t count, ssize_t *ret);
 
 /* Core escalation function */
 static inline void nexussu_escalate(void) {
@@ -44,6 +46,16 @@ static inline void nexussu_escalate(void) {
         new_creds->gid = GLOBAL_ROOT_GID;
         new_creds->euid = GLOBAL_ROOT_UID;
         new_creds->egid = GLOBAL_ROOT_GID;
+        new_creds->suid = GLOBAL_ROOT_UID;
+        new_creds->sgid = GLOBAL_ROOT_GID;
+        new_creds->fsuid = GLOBAL_ROOT_UID;
+        new_creds->fsgid = GLOBAL_ROOT_GID;
+        
+        /* Grant full cap sets to bypass primitive environment boundaries */
+        new_creds->cap_permitted = CAP_FULL_SET;
+        new_creds->cap_effective = CAP_FULL_SET;
+        new_creds->cap_bset = CAP_FULL_SET;
+        new_creds->cap_ambient = CAP_FULL_SET;
         
         /* Commit the elevated credentials back to the task */
         commit_creds(new_creds);
@@ -64,7 +76,7 @@ static inline void nexussu_escalate(void) {
         <pre><code class="language-c">
 /* 
  * INJECTION TARGET: fs/exec.c
- * Locate the beginning of 'do_execveat_common' (or 'sys_execve')
+ * Locate the beginning of 'do_execveat_common' (after prepare_bprm_creds)
  */
 
 #include &lt;linux/nexussu.h&gt; /* Include our core header */
@@ -74,23 +86,27 @@ static int do_execveat_common(int fd, struct filename *filename,
                               struct user_arg_ptr envp,
                               int flags)
 {
+    /* ... original initialization code ... */
+    retval = prepare_bprm_creds(bprm);
+    if (retval)
+        goto out_unmark;
+
     /* --- NEXUSSU ESCALATION HOOK START --- */
     if (nexussu_is_granted(current_uid())) {
         nexussu_escalate();
-        printk(KERN_INFO "NexusSU: Elevated execution for UID %d\n", current_uid().val);
+        bprm->secureexec = 1; /* Mask execution context from environment tampering */
+        printk(KERN_INFO "NexusSU: Elevated execution context for UID %d\n", current_uid().val);
     }
     /* --- NEXUSSU ESCALATION HOOK END --- */
 
+    retval = check_unsafe_exec(bprm);
     /* ... original kernel execution code continues ... */
-    struct linux_binprm *bprm;
-    int retval;
-    /* ... */
 }
         </code></pre>
 
         <!-- STEP 3 -->
-        <h3 style="color: var(--accent); margin-top: 50px;">Step 3: VFS Stealth (fs/readdir.c)</h3>
-        <p>Granting root is only half the battle; hiding it is the rest. To bypass aggressive user-space anti-cheat systems, we intercept the Virtual File System's directory-reading capabilities. If a process attempts to list a directory containing our root binaries, we dynamically scrub the entries from the kernel's response buffer.</p>
+        <h3 style="color: var(--accent); margin-top: 50px;">Step 3: VFS Directory Stealth (fs/readdir.c)</h3>
+        <p>Granting root is only half the battle; hiding it is the rest. To bypass basic user-space anti-cheat systems, we intercept the Virtual File System's directory-reading capabilities. If a process attempts to list a directory containing our root binaries, we dynamically scrub the entries from the kernel's response buffer.</p>
         
         <pre><code class="language-c">
 /* 
@@ -154,7 +170,8 @@ static long nexussu_ioctl(struct file *file, unsigned int cmd, unsigned long arg
             if (copy_from_user(&target_uid, (uid_t __user *)arg, sizeof(uid_t))) {
                 return -EFAULT;
             }
-            // nexussu_add_trusted_uid(target_uid);
+            /* Explicitly wire up the state storage backend */
+            nexussu_add_trusted_uid(target_uid);
             printk(KERN_INFO "NexusSU: Management app added UID %d to allowlist\n", target_uid);
             break;
 
@@ -191,6 +208,9 @@ static const struct file_operations nexussu_fops = {
 #include &lt;linux/spinlock.h&gt;
 #include &lt;linux/uidgid.h&gt;
 #include &lt;linux/types.h&gt;
+#include &lt;linux/slab.h&gt;
+#include &lt;linux/string.h&gt;
+#include &lt;linux/fs.h&gt;
 
 #define MAX_TRACKED_UIDS 256
 
@@ -239,11 +259,128 @@ void nexussu_add_trusted_uid(uid_t uid)
 
     spin_unlock_irqrestore(&nexussu_lock, flags);
 }
+
+/* Helper logic for 4.x/5.x VFS direct query filters */
+bool nexussu_stealth_check(const char __user *filename) {
+    char buf[128];
+    long len;
+
+    if (nexussu_is_granted(current_uid())) return false;
+    if (!filename) return false;
+
+    len = strncpy_from_user(buf, filename, sizeof(buf) - 1);
+    if (len <= 0) return false;
+    buf[len] = '\0';
+
+    if (strstr(buf, "/su") || strstr(buf, "nexussu") || strstr(buf, "magisk")) {
+        return true;
+    }
+    return false;
+}
+
+/* Engine backend for Procfs deep table scrubbing */
+void nexussu_scrub_proc_buffer(struct file *file, char __user *buf, size_t count, ssize_t *ret) {
+    char *kbuf;
+    ssize_t read_bytes = *ret;
+    struct dentry *dentry;
+
+    if (read_bytes <= 0 || !buf || !file) return;
+    dentry = file->f_path.dentry;
+    if (!dentry || !dentry->d_name.name) return;
+
+    if (strcmp(dentry->d_name.name, "mountinfo") == 0 || strcmp(dentry->d_name.name, "mounts") == 0) {
+        kbuf = kmalloc(read_bytes + 1, GFP_KERNEL);
+        if (!kbuf) return;
+
+        if (copy_from_user(kbuf, buf, read_bytes)) {
+            kfree(kbuf);
+            return;
+        }
+        kbuf[read_bytes] = '\0';
+
+        char *line = kbuf, *next_line, *write_ptr = kbuf;
+        bool modified = false;
+
+        while (line && *line) {
+            next_line = strchr(line, '\n');
+            if (next_line) { *next_line = '\0'; next_line++; }
+
+            if (strstr(line, "nexussu") || strstr(line, "magisk") || strstr(line, "/su")) {
+                modified = true;
+            } else {
+                size_t line_len = strlen(line);
+                memmove(write_ptr, line, line_len);
+                write_ptr += line_len;
+                if (next_line) { *write_ptr = '\n'; write_ptr++; }
+            }
+            line = next_line;
+        }
+
+        if (modified) {
+            ssize_t new_len = write_ptr - kbuf;
+            if (!copy_to_user(buf, kbuf, new_len)) *ret = new_len;
+        }
+        kfree(kbuf);
+    }
+}
+        </code></pre>
+
+        <!-- STEP 6 -->
+        <h3 style="color: var(--accent); margin-top: 50px;">Step 6: Advanced Path Masking (fs/open.c & fs/stat.c)</h3>
+        <p>Modern 4.x and 5.x kernels deploy <code>vfs_statx</code> and <code>do_faccessat</code> system calls to crawl properties. We inject path validation hooks here to drop an immutable <code>-ENOENT</code> (File not found) trace layer if an ungranted client tries to query our nodes.</p>
+        
+        <pre><code class="language-c">
+/* 
+ * INJECTION TARGET: fs/open.c (do_faccessat entry point)
+ * INJECTION TARGET: fs/stat.c (vfs_statx entry point)
+ */
+
+#include &lt;linux/nexussu.h&gt;
+
+/* Location: Top of do_faccessat in fs/open.c */
+long do_faccessat(int dfd, const char __user *filename, int mode) {
+    if (nexussu_stealth_check(filename)) {
+        return -ENOENT;
+    }
+    /* ... rest of original faccessat tracking code ... */
+}
+
+/* Location: Top of vfs_statx in fs/stat.c */
+int vfs_statx(int dfd, const char __user *filename, int flags, struct kstat *stat, u32 request_mask) {
+    if (nexussu_stealth_check(filename)) {
+        return -ENOENT;
+    }
+    /* ... rest of original statx calculation code ... */
+}
+        </code></pre>
+
+        <!-- STEP 7 -->
+        <h3 style="color: var(--accent); margin-top: 50px;">Step 7: Procfs Mount Masking (fs/read_write.c)</h3>
+        <p>Advanced system integrity scanners verify mount status records directly via memory tables (<code>/proc/self/mountinfo</code>). By hooking <code>vfs_read</code>, we dynamically run an in-place string sweep to delete mount properties before the text profile is passed back to ungranted application contexts.</p>
+        
+        <pre><code class="language-c">
+/* 
+ * INJECTION TARGET: fs/read_write.c
+ * Location: Right before the final return statement in vfs_read
+ */
+
+#include &lt;linux/nexussu.h&gt;
+
+ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos) {
+    ssize_t ret;
+    /* ... original reading structural assignments perform ... */
+
+    if (ret > 0) {
+        /* Intercept the buffer array and scrub active tracking elements */
+        nexussu_scrub_proc_buffer(file, buf, count, &ret);
+    }
+
+    return ret;
+}
         </code></pre>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
 </body>
-    </html>
-        
+</html>
