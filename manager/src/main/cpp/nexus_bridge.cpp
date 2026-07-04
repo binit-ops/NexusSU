@@ -5,7 +5,6 @@
 #include <sys/ioctl.h>
 #include <android/log.h>
 
-// Define the exact same ioctl commands matching your kernel driver
 #define NEXUSSU_IOC_MAGIC 'N'
 #define NEXUSSU_ALLOW_UID _IOW(NEXUSSU_IOC_MAGIC, 1, uid_t)
 #define NEXUSSU_GET_VERSION _IOR(NEXUSSU_IOC_MAGIC, 2, int)
@@ -16,19 +15,15 @@
 
 extern "C"
 JNIEXPORT jboolean JNICALL
-Java_coms_binitops_nexussu_core_NexusEngine_grantUidAccess(JNIEnv *env, jobject thiz, jint uid) {
+Java_com_nexussu_manager_core_NexusEngine_grantUidAccess(JNIEnv *env, jobject thiz, jint uid) {
     
-    // Open the character device created by the kernel driver
     int fd = open("/dev/nexussu", O_RDWR);
     if (fd < 0) {
         LOGE("Failed to open /dev/nexussu. Is the kernel patched?");
         return JNI_FALSE;
     }
 
-    // Convert the Java integer to a native Linux uid_t
     uid_t target_uid = static_cast<uid_t>(uid);
-
-    // Fire the ioctl command down to the kernel
     int result = ioctl(fd, NEXUSSU_ALLOW_UID, &target_uid);
     close(fd);
 
@@ -43,11 +38,11 @@ Java_coms_binitops_nexussu_core_NexusEngine_grantUidAccess(JNIEnv *env, jobject 
 
 extern "C"
 JNIEXPORT jint JNICALL
-Java_coms_binitops_nexussu_core_NexusEngine_getEngineVersion(JNIEnv *env, jobject thiz) {
+Java_com_nexussu_manager_core_NexusEngine_getEngineVersion(JNIEnv *env, jobject thiz) {
     
     int fd = open("/dev/nexussu", O_RDONLY);
     if (fd < 0) {
-        return -1; // Engine not found
+        return -1;
     }
 
     int version = -1;
