@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NexusSU | Legacy Source Injection</title>
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Prism.js for beautiful C code syntax highlighting -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+</head>
+<body>
+    <nav>
+        <a href="index.html">Home</a>
+        <a href="hooks.html" class="active">Kernel Hooks</a>
+    </nav>
+
+    <div class="content hero" style="margin-top: 40px;">
+        <h1>Legacy Source Injection</h1>
+        <p>For pre-GKI kernels (4.14, 4.19, 5.4), NexusSU relies on direct source tree injection. By modifying the kernel's core execution and file system files before compilation, we achieve an embedded, undetectable root environment.</p>
+
+        <h3 style="color: var(--accent); margin-top: 40px;">Step 1: The Core Header (nexussu.h)</h3>
+        <p>This header acts as the central brain. It defines the privilege escalation function that swaps the current process credentials to UID 0 (Root). This file is placed in the <code>include/linux/</code> directory of the kernel tree.</p>
+        
+        <pre><code class="language-c">
+#ifndef _NEXUSSU_H
+#define _NEXUSSU_H
+
+#include &lt;linux/cred.h&gt;
+#include &lt;linux/uidgid.h&gt;
+
+/* Function to check if a UID is granted root via the Manager App */
+extern bool nexussu_is_granted(kuid_t uid);
+
+/* Core escalation function */
+static inline void nexussu_escalate(void) {
+    struct cred *new_creds;
+    
+    /* Prepare a new credential block */
+    new_creds = prepare_creds();
+    if (new_creds != NULL) {
+        /* Assign Global Root IDs */
+        new_creds->uid = GLOBAL_ROOT_UID;
+        new_creds->gid = GLOBAL_ROOT_GID;
+        new_creds->euid = GLOBAL_ROOT_UID;
+        new_creds->egid = GLOBAL_ROOT_GID;
+        
+        /* Commit the elevated credentials back to the task */
+        commit_creds(new_creds);
+    }
+}
+
+#endif /* _NEXUSSU_H */
+        </code></pre>
+
+        <h3 style="color: var(--accent); margin-top: 40px;">Step 2: Execution Interception (fs/exec.c)</h3>
+        <p>To trigger the escalation, we inject our logic directly into the kernel's execution path. When an authorized app attempts to execute a command (like the <code>su</code> binary), the kernel intercepts it and elevates the credentials natively.</p>
+        
+        <div style="background: #2a0a0a; border-left: 4px solid #ff5252; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+            <strong>Maintainer Warning:</strong> When injecting blocks of custom logic directly into C files like <code>fs/exec.c</code>, it will inevitably cause line numbering shifts throughout the rest of the file. A character-by-character review is required to ensure you don't break existing kernel structures or misalign compiler macros.
+        </div>
+
+        <pre><code class="language-c">
+/* 
+ * INJECTION TARGET: fs/exec.c
+ * Locate the beginning of 'do_execveat_common' (or 'sys_execve')
+ */
+
+#include &lt;linux/nexussu.h&gt; /* Include our core header */
+
+static int do_execveat_common(int fd, struct filename *filename,
+                              struct user_arg_ptr argv,
+                              struct user_arg_ptr envp,
+                              int flags)
+{
+    /* --- NEXUSSU ESCALATION HOOK START --- */
+    if (nexussu_is_granted(current_uid())) {
+        nexussu_escalate();
+        printk(KERN_INFO "NexusSU: Elevated execution for UID %d\n", current_uid().val);
+    }
+    /* --- NEXUSSU ESCALATION HOOK END --- */
+
+    /* ... original kernel execution code continues ... */
+    struct linux_binprm *bprm;
+    int retval;
+    /* ... */
+}
+        </code></pre>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
+</body>
+</html>
