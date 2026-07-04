@@ -182,9 +182,78 @@ static const struct file_operations nexussu_fops = {
     .compat_ioctl = nexussu_ioctl, // Ensures compatibility for 32-bit apps running on 64-bit kernels
 };
         </code></pre>
+
+        <!-- STEP 5 -->
+        <h3 style="color: var(--accent); margin-top: 50px;">Step 5: Allowlist Core Engine (kernel/nexussu_state.c)</h3>
+        <p>To fulfill the prototypes used by the VFS and execution hooks, the kernel requires an in-memory state tracking system. This component maintains a thread-safe list of authorized Android User IDs (UIDs) using a standard Linux spinlock to protect against race conditions during high-concurrency requests.</p>
+        
+        <pre><code class="language-c">
+/* 
+ * INJECTION TARGET: kernel/nexussu_state.c (New file linked via kernel/Makefile)
+ * Implements the backend storage and validation routines for authorized UIDs
+ */
+
+#include &lt;linux/spinlock.h&gt;
+#include &lt;linux/uidgid.h&gt;
+#include &lt;linux/types.h&gt;
+
+#define MAX_TRACKED_UIDS 256
+
+static uid_t nexussu_trusted_uids[MAX_TRACKED_UIDS];
+static int nexussu_uid_count = 0;
+
+/* Define a spinlock to safely protect our database across multiple CPU cores */
+static DEFINE_SPINLOCK(nexussu_lock);
+
+/* Concrete implementation: Check if a user space UID has been granted superuser permissions */
+bool nexussu_is_granted(kuid_t kuid)
+{
+    int i;
+    uid_t uid = kuid.val;
+    unsigned long flags;
+    bool found = false;
+
+    spin_lock_irqsave(&nexussu_lock, flags);
+    for (i = 0; i < nexussu_uid_count; i++) {
+        if (nexussu_trusted_uids[i] == uid) {
+            found = true;
+            break;
+        }
+    }
+    spin_unlock_irqrestore(&nexussu_lock, flags);
+
+    return found;
+}
+
+/* Concrete implementation: Add a newly authorized application UID from the Manager App */
+void nexussu_add_trusted_uid(uid_t uid)
+{
+    int i;
+    unsigned long flags;
+
+    spin_lock_irqsave(&nexussu_lock, flags);
+    
+    /* Check if the UID is already recorded to prevent duplicates */
+    for (i = 0; i < nexussu_uid_count; i++) {
+        if (nexussu_trusted_uids[i] == uid) {
+            spin_unlock_irqrestore(&nexussu_lock, flags);
+            return;
+        }
+    }
+
+    /* Append to the database if space permits */
+    if (nexussu_uid_count < MAX_TRACKED_UIDS) {
+        nexussu_trusted_uids[nexussu_uid_count] = uid;
+        nexussu_uid_count++;
+    }
+
+    spin_unlock_irqrestore(&nexussu_lock, flags);
+}
+        </code></pre>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
 </body>
 </html>
+    
