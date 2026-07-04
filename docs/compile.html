@@ -18,7 +18,7 @@
         <h1>Building the Engine</h1>
         <p>Because legacy GKI 1.0 and pre-GKI kernels do not support universal loadable modules, the NexusSU hooks must be compiled directly into the kernel source tree. This guide covers cross-compiling your modified kernel entirely on an Android host device using a PRoot environment.</p>
 
-        <h3 style="color: var(--accent); margin-top: 40px;">1. Prepare the Build Environment</h3>
+        <h3>1. Prepare the Build Environment</h3>
         <p>Spin up an Ubuntu PRoot environment within Termux and install the required build dependencies.</p>
         
         <pre><code class="language-bash">
@@ -28,7 +28,7 @@ apt install git make bc bison build-essential zip curl flex \
     libssl-dev libfl-dev wget gcc-aarch64-linux-gnu -y
         </code></pre>
 
-        <h3 style="color: var(--accent); margin-top: 50px;">2. Fetch the Toolchain & Source</h3>
+        <h3>2. Fetch the Toolchain & Source</h3>
         <p>Download your device's specific kernel source code and a modern toolchain like Proton-Clang or Eva GCC to handle the cross-compilation.</p>
         
         <pre><code class="language-bash">
@@ -44,7 +44,7 @@ cd ~/android-kernel
 # fs/exec.c, fs/readdir.c, fs/open.c, fs/stat.c, and fs/read_write.c
         </code></pre>
 
-        <h3 style="color: var(--accent); margin-top: 50px;">3. Link the Makefiles</h3>
+        <h3>3. Link the Makefiles</h3>
         <p>Because we added new standalone C files for the state engine and character driver, we must instruct the kernel build system to compile them natively. Add our objects to the bottom of the Makefiles in their respective directories.</p>
         
         <pre><code class="language-bash">
@@ -55,7 +55,7 @@ echo "obj-y += nexussu_state.o" >> kernel/Makefile
 echo "obj-y += nexussu.o" >> drivers/char/Makefile
         </code></pre>
 
-        <h3 style="color: var(--accent); margin-top: 50px;">4. Cross-Compile the Kernel</h3>
+        <h3>4. Cross-Compile the Kernel</h3>
         <p>Export your environment variables, generate the defconfig for your specific device architecture, and initiate the build sequence. Be sure to replace <code>vendor/your_device_defconfig</code> with your actual config name.</p>
         
         <pre><code class="language-bash">
@@ -77,7 +77,7 @@ make -j8 O=out \
     CROSS_COMPILE_ARM32=arm-linux-gnueabi-
         </code></pre>
 
-        <h3 style="color: var(--accent); margin-top: 50px;">5. Packing the Boot Image</h3>
+        <h3>5. Packing the Boot Image</h3>
         <p>Once compilation succeeds, the raw kernel image will be output to <code>out/arch/arm64/boot/Image.gz-dtb</code>. You must repack this into a bootable image using tools like Magiskboot or Android Image Kitchen (AIK) before flashing it via Fastboot or a secondary Bugjaeger host.</p>
         
         <pre><code class="language-bash">
@@ -87,8 +87,9 @@ cp out/arch/arm64/boot/Image.gz-dtb kernel
 ./magiskboot repack stock_boot.img nexussu_patched_boot.img
         </code></pre>
 
-        <div style="background: #1a1a05; border-left: 4px solid #FFCA28; padding: 15px; margin-top: 30px; border-radius: 4px;">
-            <strong>Warning:</strong> Always ensure you have a fallback method to restore your partitions (such as MTK Client for MediaTek devices) before flashing custom legacy kernels. A single misaligned pointer in your source injection will cause an immediate bootloop.
+        <div class="alert-panel">
+            <strong>Critical Warning</strong>
+            <p>Always ensure you have a fallback method to restore your partitions before flashing custom legacy kernels. A single misaligned pointer in your source injection will cause an immediate bootloop.</p>
         </div>
     </div>
 
