@@ -3,18 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="style.css">
     <title>NexusSU | Kernel-Level Root</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <nav>
         <a href="index.html" class="active">Home</a>
+        <a href="hooks.html">Kernel Hooks</a>
+        <a href="compile.html">Compilation</a>
     </nav>
 
     <div class="content hero">
         <h1>NexusSU</h1>
         <p>Advanced, kernel-level root solution for Android. Built for performance, stability, and total stealth.</p>
-        <a href="https://github.com/YOUR_USERNAME/YOUR_REPO/releases" class="button">Download APK</a>
+        <a href="https://github.com/binit-ops/NexusSU/releases" class="button">Download APK</a>
+
+        <h3 style="margin-top: 50px; color: var(--accent);">Target Compatibility</h3>
+        <p>NexusSU utilizes modern Android kernel architecture. Support is divided by GKI compatibility:</p>
+        
+        <table style="width: 100%; text-align: left; margin-top: 20px; border-collapse: collapse;">
+            <tr style="border-bottom: 1px solid #333;">
+                <th style="padding: 10px 0; color: var(--dim);">Kernel Version</th>
+                <th style="padding: 10px 0; color: var(--dim);">Architecture</th>
+                <th style="padding: 10px 0; color: var(--dim);">Support Type</th>
+            </tr>
+            <tr style="border-bottom: 1px solid #333;">
+                <td style="padding: 15px 0;"><strong>5.10 - 6.12 (GKI 2.0)</strong></td>
+                <td>Android 12+</td>
+                <td style="color: #64FFDA;">Full (Pre-built LKM & Boot Images)</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #333;">
+                <td style="padding: 15px 0;"><strong>4.19 - 5.4 (GKI 1.0)</strong></td>
+                <td>Android 11</td>
+                <td style="color: #FFCA28;">Manual Compile (Source Injection)</td>
+            </tr>
+            <tr>
+                <td style="padding: 15px 0;"><strong>4.14 & Below</strong></td>
+                <td>Android 10-</td>
+                <td style="color: #FF5252;">Experimental / Manual Backports</td>
+            </tr>
+        </table>
     </div>
 </body>
 </html>
