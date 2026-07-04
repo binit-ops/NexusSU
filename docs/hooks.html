@@ -5,17 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NexusSU | Legacy Source Injection</title>
     <link rel="stylesheet" href="style.css">
-    
-    <!-- Prism.js for beautiful C code syntax highlighting -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
 </head>
 <body>
     <nav>
         <a href="index.html">Home</a>
         <a href="hooks.html" class="active">Kernel Hooks</a>
+        <a href="compile.html">Compilation</a>
     </nav>
 
-    <div class="content hero" style="margin-top: 40px;">
+    <div class="content hero">
         <h1>Legacy Source Injection</h1>
         <p>For pre-GKI kernels (4.14, 4.19, 5.4), NexusSU relies on direct source tree injection. By modifying the kernel's core execution and file system files before compilation, we achieve an embedded, undetectable root environment.</p>
 
@@ -131,7 +130,7 @@ static int nexussu_filldir_hook(struct dir_context *ctx, const char *name, int n
         
         <pre><code class="language-c">
 /* 
- * INJECTION TARGET: drivers/char/nexussu.c (or integrated into core driver initializations)
+ * INJECTION TARGET: drivers/char/nexussu.c
  * Implements an ioctl gateway for user-space companion communication
  */
 
@@ -152,25 +151,21 @@ static long nexussu_ioctl(struct file *file, unsigned int cmd, unsigned long arg
     
     switch (cmd) {
         case NEXUSSU_ALLOW_UID:
-            /* Safely copy the target UID data packet from user space */
             if (copy_from_user(&target_uid, (uid_t __user *)arg, sizeof(uid_t))) {
                 return -EFAULT;
             }
-            
-            /* Add the UID to our kernel tracking table */
             // nexussu_add_trusted_uid(target_uid);
             printk(KERN_INFO "NexusSU: Management app added UID %d to allowlist\n", target_uid);
             break;
 
         case NEXUSSU_GET_VERSION:
-            /* Return the active root engine version back to the app */
             if (copy_to_user((int __user *)arg, &ENGINE_VERSION, sizeof(int))) {
                 return -EFAULT;
             }
             break;
 
         default:
-            return -ENOTTY; // Command not supported
+            return -ENOTTY;
     }
     return 0;
 }
@@ -179,7 +174,7 @@ static long nexussu_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 static const struct file_operations nexussu_fops = {
     .owner = THIS_MODULE,
     .unlocked_ioctl = nexussu_ioctl,
-    .compat_ioctl = nexussu_ioctl, // Ensures compatibility for 32-bit apps running on 64-bit kernels
+    .compat_ioctl = nexussu_ioctl,
 };
         </code></pre>
 
@@ -189,7 +184,7 @@ static const struct file_operations nexussu_fops = {
         
         <pre><code class="language-c">
 /* 
- * INJECTION TARGET: kernel/nexussu_state.c (New file linked via kernel/Makefile)
+ * INJECTION TARGET: kernel/nexussu_state.c
  * Implements the backend storage and validation routines for authorized UIDs
  */
 
@@ -202,10 +197,8 @@ static const struct file_operations nexussu_fops = {
 static uid_t nexussu_trusted_uids[MAX_TRACKED_UIDS];
 static int nexussu_uid_count = 0;
 
-/* Define a spinlock to safely protect our database across multiple CPU cores */
 static DEFINE_SPINLOCK(nexussu_lock);
 
-/* Concrete implementation: Check if a user space UID has been granted superuser permissions */
 bool nexussu_is_granted(kuid_t kuid)
 {
     int i;
@@ -225,7 +218,6 @@ bool nexussu_is_granted(kuid_t kuid)
     return found;
 }
 
-/* Concrete implementation: Add a newly authorized application UID from the Manager App */
 void nexussu_add_trusted_uid(uid_t uid)
 {
     int i;
@@ -233,7 +225,6 @@ void nexussu_add_trusted_uid(uid_t uid)
 
     spin_lock_irqsave(&nexussu_lock, flags);
     
-    /* Check if the UID is already recorded to prevent duplicates */
     for (i = 0; i < nexussu_uid_count; i++) {
         if (nexussu_trusted_uids[i] == uid) {
             spin_unlock_irqrestore(&nexussu_lock, flags);
@@ -241,7 +232,6 @@ void nexussu_add_trusted_uid(uid_t uid)
         }
     }
 
-    /* Append to the database if space permits */
     if (nexussu_uid_count < MAX_TRACKED_UIDS) {
         nexussu_trusted_uids[nexussu_uid_count] = uid;
         nexussu_uid_count++;
@@ -255,5 +245,5 @@ void nexussu_add_trusted_uid(uid_t uid)
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
 </body>
-</html>
-    
+    </html>
+        
