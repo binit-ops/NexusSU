@@ -7,7 +7,7 @@ plugins {
 android {
     // CORRECTED: Aligned with your actual package structure in 164555.jpg
     namespace = "com.nexussu.manager"
-    compileSdk = 34
+    compileSdk = 36
     
     ndkVersion = "25.1.8937393"
 
