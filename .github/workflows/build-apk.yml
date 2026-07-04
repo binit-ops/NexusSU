@@ -6,6 +6,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write      # Required for deployment
+      id-token: write   # Required for authentication
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
