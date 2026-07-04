@@ -19,6 +19,7 @@
         <h1>Legacy Source Injection</h1>
         <p>For pre-GKI kernels (4.14, 4.19, 5.4), NexusSU relies on direct source tree injection. By modifying the kernel's core execution and file system files before compilation, we achieve an embedded, undetectable root environment.</p>
 
+        <!-- STEP 1 -->
         <h3 style="color: var(--accent); margin-top: 40px;">Step 1: The Core Header (nexussu.h)</h3>
         <p>This header acts as the central brain. It defines the privilege escalation function that swaps the current process credentials to UID 0 (Root). This file is placed in the <code>include/linux/</code> directory of the kernel tree.</p>
         
@@ -53,6 +54,7 @@ static inline void nexussu_escalate(void) {
 #endif /* _NEXUSSU_H */
         </code></pre>
 
+        <!-- STEP 2 -->
         <h3 style="color: var(--accent); margin-top: 50px;">Step 2: Execution Interception (fs/exec.c)</h3>
         <p>To trigger the escalation, we inject our logic directly into the kernel's execution path. When an authorized app attempts to execute a command (like the <code>su</code> binary), the kernel intercepts it and elevates the credentials natively.</p>
         
@@ -87,6 +89,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 }
         </code></pre>
 
+        <!-- STEP 3 -->
         <h3 style="color: var(--accent); margin-top: 50px;">Step 3: VFS Stealth (fs/readdir.c)</h3>
         <p>Granting root is only half the battle; hiding it is the rest. To bypass aggressive user-space anti-cheat systems, we intercept the Virtual File System's directory-reading capabilities. If a process attempts to list a directory containing our root binaries, we dynamically scrub the entries from the kernel's response buffer.</p>
         
@@ -120,6 +123,64 @@ static int nexussu_filldir_hook(struct dir_context *ctx, const char *name, int n
     // return original_filldir(ctx, name, namlen, offset, ino, d_type);
     return 0;
 }
+        </code></pre>
+
+        <!-- STEP 4 -->
+        <h3 style="color: var(--accent); margin-top: 50px;">Step 4: Control Interface (drivers/char/nexussu.c)</h3>
+        <p>A standalone kernel root engine requires a communication bridge to receive commands from the companion Android app. By registering a lightweight character device and overriding its <code>unlocked_ioctl</code> handler, the user-space manager can safely pass tracking tokens, request status indicators, and update the internal UID allowance matrix.</p>
+        
+        <pre><code class="language-c">
+/* 
+ * INJECTION TARGET: drivers/char/nexussu.c (or integrated into core driver initializations)
+ * Implements an ioctl gateway for user-space companion communication
+ */
+
+#include &lt;linux/fs.h&gt;
+#include &lt;linux/uaccess.h&gt;
+#include &lt;linux/nexussu.h&gt;
+
+#define NEXUSSU_IOC_MAGIC 'N'
+#define NEXUSSU_ALLOW_UID _IOW(NEXUSSU_IOC_MAGIC, 1, uid_t)
+#define NEXUSSU_GET_VERSION _IOR(NEXUSSU_IOC_MAGIC, 2, int)
+
+const int ENGINE_VERSION = 100; // v1.0.0
+
+/* Handle incoming configuration requests from the Manager App */
+static long nexussu_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+    uid_t target_uid;
+    
+    switch (cmd) {
+        case NEXUSSU_ALLOW_UID:
+            /* Safely copy the target UID data packet from user space */
+            if (copy_from_user(&target_uid, (uid_t __user *)arg, sizeof(uid_t))) {
+                return -EFAULT;
+            }
+            
+            /* Add the UID to our kernel tracking table */
+            // nexussu_add_trusted_uid(target_uid);
+            printk(KERN_INFO "NexusSU: Management app added UID %d to allowlist\n", target_uid);
+            break;
+
+        case NEXUSSU_GET_VERSION:
+            /* Return the active root engine version back to the app */
+            if (copy_to_user((int __user *)arg, &ENGINE_VERSION, sizeof(int))) {
+                return -EFAULT;
+            }
+            break;
+
+        default:
+            return -ENOTTY; // Command not supported
+    }
+    return 0;
+}
+
+/* Bind our custom ioctl gateway into standard file operations */
+static const struct file_operations nexussu_fops = {
+    .owner = THIS_MODULE,
+    .unlocked_ioctl = nexussu_ioctl,
+    .compat_ioctl = nexussu_ioctl, // Ensures compatibility for 32-bit apps running on 64-bit kernels
+};
         </code></pre>
     </div>
 
