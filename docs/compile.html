@@ -6,6 +6,13 @@
     <title>NexusSU | Compilation Guide</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+    <style>
+        /* Reusing the code window styles from hooks.html */
+        .code-window { background: rgba(15, 17, 21, 0.6); border: 1px solid var(--glass-border); border-radius: 12px; overflow: hidden; margin-bottom: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+        .code-toolbar { display: flex; justify-content: space-between; align-items: center; background: rgba(255, 255, 255, 0.03); border-bottom: 1px solid var(--glass-border); padding: 12px 16px; font-size: 0.85rem; }
+        .code-actions button { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text-main); padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+        .code-window pre { margin: 0 !important; border: none !important; border-radius: 0 !important; }
+    </style>
 </head>
 <body>
     <nav>
@@ -16,84 +23,80 @@
 
     <div class="content hero">
         <h1>Building the Engine</h1>
-        <p>Because legacy GKI 1.0 and pre-GKI kernels do not support universal loadable modules, the NexusSU hooks must be compiled directly into the kernel source tree. This guide covers cross-compiling your modified kernel entirely on an Android host device using a PRoot environment.</p>
+        <p>Because legacy GKI 1.0 and pre-GKI kernels do not support universal loadable modules, the NexusSU hooks must be compiled directly into the kernel source tree.</p>
 
         <h3>1. Prepare the Build Environment</h3>
-        <p>Spin up an Ubuntu PRoot environment within Termux and install the required build dependencies.</p>
-        
-        <pre><code class="language-bash">
-# Update package lists and install core compilation tools
+        <div class="code-window">
+            <div class="code-toolbar">
+                <span class="file-badge">Termux / PRoot</span>
+                <button onclick="copyCode(this)">📋 Copy</button>
+            </div>
+            <pre><code class="language-bash">
 apt update && apt upgrade -y
 apt install git make bc bison build-essential zip curl flex \
     libssl-dev libfl-dev wget gcc-aarch64-linux-gnu -y
-        </code></pre>
+            </code></pre>
+        </div>
 
         <h3>2. Fetch the Toolchain & Source</h3>
-        <p>Download your device's specific kernel source code and a modern toolchain like Proton-Clang or Eva GCC to handle the cross-compilation.</p>
-        
-        <pre><code class="language-bash">
-# Clone the Proton-Clang toolchain
+        <div class="code-window">
+            <div class="code-toolbar">
+                <span class="file-badge">Repository Setup</span>
+                <button onclick="copyCode(this)">📋 Copy</button>
+            </div>
+            <pre><code class="language-bash">
 git clone --depth=1 https://github.com/kdrag0n/proton-clang.git ~/toolchain
-
-# Clone your device's specific kernel source (Replace URL with your OEM source)
 git clone --depth=1 https://github.com/OEM/kernel_source.git ~/android-kernel
 cd ~/android-kernel
-
-# At this stage, inject the NexusSU C hooks into:
-# include/linux/nexussu.h, kernel/nexussu_state.c, drivers/char/nexussu.c,
-# fs/exec.c, fs/readdir.c, fs/open.c, fs/stat.c, and fs/read_write.c
-        </code></pre>
+            </code></pre>
+        </div>
 
         <h3>3. Link the Makefiles</h3>
-        <p>Because we added new standalone C files for the state engine and character driver, we must instruct the kernel build system to compile them natively. Add our objects to the bottom of the Makefiles in their respective directories.</p>
-        
-        <pre><code class="language-bash">
-# Add to the bottom of kernel/Makefile
+        <div class="code-window">
+            <div class="code-toolbar">
+                <span class="file-badge">Makefile Injections</span>
+                <button onclick="copyCode(this)">📋 Copy</button>
+            </div>
+            <pre><code class="language-bash">
 echo "obj-y += nexussu_state.o" >> kernel/Makefile
-
-# Add to the bottom of drivers/char/Makefile
 echo "obj-y += nexussu.o" >> drivers/char/Makefile
-        </code></pre>
+            </code></pre>
+        </div>
 
-        <h3>4. Cross-Compile the Kernel</h3>
-        <p>Export your environment variables, generate the defconfig for your specific device architecture, and initiate the build sequence. Be sure to replace <code>vendor/your_device_defconfig</code> with your actual config name.</p>
-        
-        <pre><code class="language-bash">
-# Export toolchain paths
+        <h3>4. Cross-Compile</h3>
+        <div class="code-window">
+            <div class="code-toolbar">
+                <span class="file-badge">Build Command</span>
+                <button onclick="copyCode(this)">📋 Copy</button>
+            </div>
+            <pre><code class="language-bash">
 export PATH="$HOME/toolchain/bin:$PATH"
 export CROSS_COMPILE=aarch64-linux-gnu-
-export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
 export CC=clang
 export ARCH=arm64
 
-# Clean the tree and generate the configuration
 make clean && make mrproper
 make vendor/your_device_defconfig O=out
-
-# Start the compilation (Using 8 threads)
-make -j8 O=out \
-    CC=clang \
-    CROSS_COMPILE=aarch64-linux-gnu- \
-    CROSS_COMPILE_ARM32=arm-linux-gnueabi-
-        </code></pre>
-
-        <h3>5. Packing the Boot Image</h3>
-        <p>Once compilation succeeds, the raw kernel image will be output to <code>out/arch/arm64/boot/Image.gz-dtb</code>. You must repack this into a bootable image using tools like Magiskboot or Android Image Kitchen (AIK) before flashing it via Fastboot or a secondary Bugjaeger host.</p>
-        
-        <pre><code class="language-bash">
-# Example Magiskboot repack sequence
-./magiskboot unpack stock_boot.img
-cp out/arch/arm64/boot/Image.gz-dtb kernel
-./magiskboot repack stock_boot.img nexussu_patched_boot.img
-        </code></pre>
+make -j8 O=out
+            </code></pre>
+        </div>
 
         <div class="alert-panel">
             <strong>Critical Warning</strong>
-            <p>Always ensure you have a fallback method to restore your partitions before flashing custom legacy kernels. A single misaligned pointer in your source injection will cause an immediate bootloop.</p>
+            <p>Always ensure you have a fallback method to restore your partitions. A single misaligned pointer in your source injection will cause an immediate bootloop.</p>
         </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script>
+        function copyCode(btn) {
+            const code = btn.closest('.code-window').querySelector('code').innerText;
+            navigator.clipboard.writeText(code);
+            const original = btn.innerText;
+            btn.innerText = '✅ Copied!';
+            setTimeout(() => btn.innerText = original, 2000);
+        }
+    </script>
 </body>
 </html>
