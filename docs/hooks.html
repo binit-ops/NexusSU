@@ -6,6 +6,19 @@
     <title>NexusSU | Legacy Source Injection</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+    <style>
+        .code-window { background: rgba(15, 17, 21, 0.6); border: 1px solid var(--glass-border); border-radius: 12px; overflow: hidden; margin-bottom: 32px; transition: all 0.3s ease; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+        .code-toolbar { display: flex; justify-content: space-between; align-items: center; background: rgba(255, 255, 255, 0.03); border-bottom: 1px solid var(--glass-border); padding: 12px 16px; font-size: 0.85rem; flex-wrap: wrap; gap: 10px; }
+        .code-info { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+        .file-badge { color: var(--accent); font-family: 'Fira Code', monospace; font-weight: 600; background: var(--accent-glow); padding: 4px 8px; border-radius: 6px; }
+        .add-badge { color: var(--success); font-weight: 700; background: rgba(52, 211, 153, 0.1); padding: 2px 6px; border-radius: 4px; }
+        .code-actions { display: flex; gap: 8px; }
+        .code-actions button { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text-main); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 500; transition: all 0.2s; }
+        .code-actions button:hover { background: rgba(255, 255, 255, 0.15); }
+        .code-window pre { margin: 0 !important; border: none !important; border-radius: 0 !important; box-shadow: none !important; }
+        .code-window.expanded { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 9999; border-radius: 0; display: flex; flex-direction: column; background: #0f1115; margin: 0; }
+        .code-window.expanded pre { flex-grow: 1; overflow-y: auto; }
+    </style>
 </head>
 <body>
     <nav>
@@ -21,7 +34,18 @@
         <h3>Step 1: The Core Header (include/linux/nexussu.h)</h3>
         <p>This header acts as the central brain. It defines the privilege escalation function that swaps the current process credentials to UID 0 (Root). This file is placed in the <code>include/linux/</code> directory of the kernel tree.</p>
         
-        <pre><code class="language-c">
+        <div class="code-window">
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="add-badge">+</span>
+                    <span class="file-name file-badge">include/linux/nexussu.h</span>
+                </div>
+                <div class="code-actions">
+                    <button onclick="copyCode(this)">📋 Copy</button>
+                    <button onclick="toggleEnlarge(this)">⛶ Enlarge</button>
+                </div>
+            </div>
+            <pre><code class="language-c">
 #ifndef _NEXUSSU_H
 #define _NEXUSSU_H
 
@@ -33,13 +57,17 @@ extern bool nexussu_is_granted(kuid_t uid);
 extern bool nexussu_stealth_check(const char __user *filename);
 extern void nexussu_scrub_proc_buffer(struct file *file, char __user *buf, size_t count, ssize_t *ret);
 
-/* Core escalation function */
+/* 
+ * Core escalation function.
+ * Prepares a new credential block and commits global root IDs 
+ * to elevate the calling process.
+ */
 static inline void nexussu_escalate(void) {
     struct cred *new_creds;
     
-    /* Prepare a new credential block */
     new_creds = prepare_creds();
     if (new_creds != NULL) {
+        /* Assign Global Root IDs */
         new_creds->uid = GLOBAL_ROOT_UID;
         new_creds->gid = GLOBAL_ROOT_GID;
         new_creds->euid = GLOBAL_ROOT_UID;
@@ -49,27 +77,36 @@ static inline void nexussu_escalate(void) {
         new_creds->fsuid = GLOBAL_ROOT_UID;
         new_creds->fsgid = GLOBAL_ROOT_GID;
         
+        /* Grant full capability sets to bypass primitive environment boundaries */
         new_creds->cap_permitted = CAP_FULL_SET;
         new_creds->cap_effective = CAP_FULL_SET;
         new_creds->cap_bset = CAP_FULL_SET;
         new_creds->cap_ambient = CAP_FULL_SET;
         
+        /* Commit the elevated credentials back to the task */
         commit_creds(new_creds);
     }
 }
 
 #endif /* _NEXUSSU_H */
-        </code></pre>
+            </code></pre>
+        </div>
 
         <h3>Step 2: Execution Interception (fs/exec.c)</h3>
         <p>To trigger the escalation, we inject our logic directly into the kernel's execution path. When an authorized app attempts to execute a command, the kernel intercepts it and elevates the credentials natively.</p>
         
-        <div class="alert-panel">
-            <strong>Maintainer Warning</strong>
-            <p>When injecting blocks of custom logic directly into C files like <code>fs/exec.c</code>, it will inevitably cause line numbering shifts throughout the rest of the file. A character-by-character review is required to ensure you don't break existing kernel structures or misalign compiler macros.</p>
-        </div>
-
-        <pre><code class="language-c">
+        <div class="code-window">
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="add-badge">+</span>
+                    <span class="file-name file-badge">fs/exec.c</span>
+                </div>
+                <div class="code-actions">
+                    <button onclick="copyCode(this)">📋 Copy</button>
+                    <button onclick="toggleEnlarge(this)">⛶ Enlarge</button>
+                </div>
+            </div>
+            <pre><code class="language-c">
 /* 
  * INJECTION TARGET: fs/exec.c
  * Locate the beginning of 'do_execveat_common' (after prepare_bprm_creds)
@@ -88,9 +125,14 @@ static int do_execveat_common(int fd, struct filename *filename,
         goto out_unmark;
 
     /* --- NEXUSSU ESCALATION HOOK START --- */
+    /* 
+     * If the current process UID is in our allowlist, 
+     * perform the credential elevation immediately.
+     */
     if (nexussu_is_granted(current_uid())) {
         nexussu_escalate();
-        bprm->secureexec = 1;
+        /* Mask execution context from environment tampering */
+        bprm->secureexec = 1; 
         printk(KERN_INFO "NexusSU: Elevated execution context for UID %d\n", current_uid().val);
     }
     /* --- NEXUSSU ESCALATION HOOK END --- */
@@ -98,12 +140,24 @@ static int do_execveat_common(int fd, struct filename *filename,
     retval = check_unsafe_exec(bprm);
     /* ... original kernel execution code continues ... */
 }
-        </code></pre>
+            </code></pre>
+        </div>
 
         <h3>Step 3: VFS Directory Stealth (fs/readdir.c)</h3>
-        <p>Granting root is only half the battle; hiding it is the rest. To bypass basic user-space anti-cheat systems, we intercept the Virtual File System's directory-reading capabilities.</p>
+        <p>Granting root is only half the battle; hiding it is the rest. We intercept the Virtual File System's directory-reading capabilities to hide our root binaries.</p>
         
-        <pre><code class="language-c">
+        <div class="code-window">
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="add-badge">+</span>
+                    <span class="file-name file-badge">fs/readdir.c</span>
+                </div>
+                <div class="code-actions">
+                    <button onclick="copyCode(this)">📋 Copy</button>
+                    <button onclick="toggleEnlarge(this)">⛶ Enlarge</button>
+                </div>
+            </div>
+            <pre><code class="language-c">
 /* 
  * INJECTION TARGET: fs/readdir.c
  * Hooking the 'filldir' actor to hide specific files from user-space 
@@ -114,21 +168,39 @@ static int do_execveat_common(int fd, struct filename *filename,
 
 #define HIDE_TARGET "su"
 
+/* 
+ * Our custom wrapper for the directory filler.
+ * It checks the name of the file being read. If it matches our target,
+ * it returns 0 (success) without actually writing the entry to the user's buffer.
+ */
 static int nexussu_filldir_hook(struct dir_context *ctx, const char *name, int namlen,
                                 loff_t offset, u64 ino, unsigned int d_type)
 {
+    /* If the file is 'su', skip it completely */
     if (namlen == 2 && strncmp(name, HIDE_TARGET, 2) == 0) {
         printk(KERN_DEBUG "NexusSU: Hid '%s' from directory listing\n", HIDE_TARGET);
         return 0; 
     }
     return 0;
 }
-        </code></pre>
+            </code></pre>
+        </div>
 
         <h3>Step 4: Control Interface (drivers/char/nexussu.c)</h3>
-        <p>A standalone kernel root engine requires a communication bridge to receive commands from the companion Android app. By registering a lightweight character device and overriding its <code>unlocked_ioctl</code> handler, the user-space manager can safely pass tracking tokens.</p>
+        <p>A standalone kernel root engine requires a communication bridge to receive commands from the companion Android app via a lightweight character device.</p>
         
-        <pre><code class="language-c">
+        <div class="code-window">
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="add-badge">+</span>
+                    <span class="file-name file-badge">drivers/char/nexussu.c</span>
+                </div>
+                <div class="code-actions">
+                    <button onclick="copyCode(this)">📋 Copy</button>
+                    <button onclick="toggleEnlarge(this)">⛶ Enlarge</button>
+                </div>
+            </div>
+            <pre><code class="language-c">
 /* 
  * INJECTION TARGET: drivers/char/nexussu.c
  * Implements an ioctl gateway for user-space companion communication
@@ -144,19 +216,25 @@ static int nexussu_filldir_hook(struct dir_context *ctx, const char *name, int n
 
 const int ENGINE_VERSION = 100; // v1.0.0
 
+/* Handle incoming configuration requests from the Manager App */
 static long nexussu_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
     uid_t target_uid;
     
     switch (cmd) {
         case NEXUSSU_ALLOW_UID:
-            if (copy_from_user(&target_uid, (uid_t __user *)arg, sizeof(uid_t))) return -EFAULT;
+            if (copy_from_user(&target_uid, (uid_t __user *)arg, sizeof(uid_t))) {
+                return -EFAULT;
+            }
+            /* Explicitly wire up the state storage backend */
             nexussu_add_trusted_uid(target_uid);
             printk(KERN_INFO "NexusSU: Management app added UID %d to allowlist\n", target_uid);
             break;
 
         case NEXUSSU_GET_VERSION:
-            if (copy_to_user((int __user *)arg, &ENGINE_VERSION, sizeof(int))) return -EFAULT;
+            if (copy_to_user((int __user *)arg, &ENGINE_VERSION, sizeof(int))) {
+                return -EFAULT;
+            }
             break;
 
         default:
@@ -165,17 +243,30 @@ static long nexussu_ioctl(struct file *file, unsigned int cmd, unsigned long arg
     return 0;
 }
 
+/* Bind our custom ioctl gateway into standard file operations */
 static const struct file_operations nexussu_fops = {
     .owner = THIS_MODULE,
     .unlocked_ioctl = nexussu_ioctl,
     .compat_ioctl = nexussu_ioctl,
 };
-        </code></pre>
+            </code></pre>
+        </div>
 
         <h3>Step 5: Allowlist Core Engine (kernel/nexussu_state.c)</h3>
         <p>This component maintains a thread-safe list of authorized Android User IDs (UIDs) using a standard Linux spinlock to protect against race conditions during high-concurrency requests.</p>
         
-        <pre><code class="language-c">
+        <div class="code-window">
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="add-badge">+</span>
+                    <span class="file-name file-badge">kernel/nexussu_state.c</span>
+                </div>
+                <div class="code-actions">
+                    <button onclick="copyCode(this)">📋 Copy</button>
+                    <button onclick="toggleEnlarge(this)">⛶ Enlarge</button>
+                </div>
+            </div>
+            <pre><code class="language-c">
 /* 
  * INJECTION TARGET: kernel/nexussu_state.c
  * Implements the backend storage and validation routines for authorized UIDs
@@ -194,6 +285,7 @@ static uid_t nexussu_trusted_uids[MAX_TRACKED_UIDS];
 static int nexussu_uid_count = 0;
 static DEFINE_SPINLOCK(nexussu_lock);
 
+/* Validates if a UID is authorized */
 bool nexussu_is_granted(kuid_t kuid)
 {
     int i;
@@ -212,6 +304,7 @@ bool nexussu_is_granted(kuid_t kuid)
     return found;
 }
 
+/* Adds a new trusted UID to the in-memory array */
 void nexussu_add_trusted_uid(uid_t uid)
 {
     int i;
@@ -232,6 +325,7 @@ void nexussu_add_trusted_uid(uid_t uid)
     spin_unlock_irqrestore(&nexussu_lock, flags);
 }
 
+/* Helper logic for 4.x/5.x VFS direct query filters */
 bool nexussu_stealth_check(const char __user *filename) {
     char buf[128];
     long len;
@@ -249,6 +343,7 @@ bool nexussu_stealth_check(const char __user *filename) {
     return false;
 }
 
+/* Engine backend for Procfs deep table scrubbing */
 void nexussu_scrub_proc_buffer(struct file *file, char __user *buf, size_t count, ssize_t *ret) {
     char *kbuf;
     ssize_t read_bytes = *ret;
@@ -293,12 +388,24 @@ void nexussu_scrub_proc_buffer(struct file *file, char __user *buf, size_t count
         kfree(kbuf);
     }
 }
-        </code></pre>
+            </code></pre>
+        </div>
 
         <h3>Step 6: Advanced Path Masking (fs/open.c & fs/stat.c)</h3>
-        <p>Modern 4.x and 5.x kernels deploy <code>vfs_statx</code> and <code>do_faccessat</code> system calls to crawl properties. We inject path validation hooks here to drop an immutable <code>-ENOENT</code> trace layer.</p>
+        <p>Modern kernels use <code>vfs_statx</code> and <code>do_faccessat</code> system calls. We inject path validation hooks here to drop an immutable <code>-ENOENT</code> trace layer.</p>
         
-        <pre><code class="language-c">
+        <div class="code-window">
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="add-badge">+</span>
+                    <span class="file-name file-badge">fs/open.c & fs/stat.c</span>
+                </div>
+                <div class="code-actions">
+                    <button onclick="copyCode(this)">📋 Copy</button>
+                    <button onclick="toggleEnlarge(this)">⛶ Enlarge</button>
+                </div>
+            </div>
+            <pre><code class="language-c">
 /* Location: Top of do_faccessat in fs/open.c */
 long do_faccessat(int dfd, const char __user *filename, int mode) {
     if (nexussu_stealth_check(filename)) {
@@ -314,27 +421,54 @@ int vfs_statx(int dfd, const char __user *filename, int flags, struct kstat *sta
     }
     /* ... rest of original statx calculation code ... */
 }
-        </code></pre>
+            </code></pre>
+        </div>
 
         <h3>Step 7: Procfs Mount Masking (fs/read_write.c)</h3>
         <p>Advanced system integrity scanners verify mount status records directly via memory tables. By hooking <code>vfs_read</code>, we dynamically run an in-place string sweep to delete mount properties.</p>
         
-        <pre><code class="language-c">
+        <div class="code-window">
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="add-badge">+</span>
+                    <span class="file-name file-badge">fs/read_write.c</span>
+                </div>
+                <div class="code-actions">
+                    <button onclick="copyCode(this)">📋 Copy</button>
+                    <button onclick="toggleEnlarge(this)">⛶ Enlarge</button>
+                </div>
+            </div>
+            <pre><code class="language-c">
 /* Location: Right before the final return statement in vfs_read */
 ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos) {
     ssize_t ret;
-    /* ... original reading structural assignments perform ... */
+    /* ... original reading structural assignments ... */
 
     if (ret > 0) {
+        /* Intercept the buffer array and scrub active tracking elements */
         nexussu_scrub_proc_buffer(file, buf, count, &ret);
     }
 
     return ret;
 }
-        </code></pre>
+            </code></pre>
+        </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
+    <script>
+        function copyCode(btn) {
+            const code = btn.closest('.code-window').querySelector('code').innerText;
+            navigator.clipboard.writeText(code);
+            const original = btn.innerText;
+            btn.innerText = '✅ Copied!';
+            setTimeout(() => btn.innerText = original, 2000);
+        }
+        function toggleEnlarge(btn) {
+            btn.closest('.code-window').classList.toggle('expanded');
+        }
+    </script>
 </body>
-</html>
+                      </html>
+    
