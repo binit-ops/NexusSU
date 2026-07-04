@@ -1,15 +1,20 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    // Your Kotlin 2.2.0 Compose Compiler setup
+    id("org.jetbrains.kotlin.plugin.compose") 
 }
 
 android {
     namespace = "coms.binitops.nexussu"
     compileSdk = 34
+    
+    // 1. ADDED: NDK Version for GitHub Actions runner
+    ndkVersion = "25.1.8937393"
 
     defaultConfig {
         applicationId = "coms.binitops.nexussu"
-        minSdk = 26 // Android 8.0 - Safe baseline for modern UI
+        minSdk = 26
         targetSdk = 34
         versionCode = 1
         versionName = "1.0.0"
@@ -18,8 +23,8 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
-        
-        // Tells CMake to compile for common Android architectures
+
+        // 2. ADDED: C++ ABI and compiler flags for the JNI bridge
         externalNativeBuild {
             cmake {
                 cppFlags += "-std=c++17"
@@ -47,19 +52,14 @@ android {
         jvmTarget = "1.8"
     }
 
-    // 1. Jetpack Compose Configuration
     buildFeatures {
         compose = true
     }
-    
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.1"
-    }
 
-    // 2. C++ (JNI) Compiler Configuration
+    // 3. ADDED: Link to the CMake build file
     externalNativeBuild {
         cmake {
-            path("src/main/cpp/CMakeLists.txt")
+            path = file("src/main/cpp/CMakeLists.txt")
             version = "3.22.1"
         }
     }
@@ -72,19 +72,21 @@ android {
 }
 
 dependencies {
-    // Core Android KTX
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.2")
-    
-    // Jetpack Compose & Material 3
     implementation("androidx.activity:activity-compose:1.9.0")
+    
+    // Jetpack Compose BOM
     implementation(platform("androidx.compose:compose-bom:2024.06.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
 
-    // Testing
+    // Your Liquid-Glass UI Dependencies
+    implementation("dev.chrisbanes.haze:haze:1.7.2")
+    implementation("dev.chrisbanes.haze:haze-materials:1.7.2")
+
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
