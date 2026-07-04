@@ -18,37 +18,37 @@
         <p>Advanced, kernel-level root solution for Android. Built for performance, stability, and total stealth.</p>
         <a href="https://github.com/binit-ops/NexusSU/releases" class="button">Download APK</a>
 
-        <h3 style="margin-top: 50px; color: var(--accent);">Next-Generation Stealth</h3>
+        <h3>Next-Generation Stealth</h3>
         <p>NexusSU utilizes a multi-pillared architecture to provide root access while remaining completely invisible to user-space anti-cheat mechanisms:</p>
-        <ul style="margin-top: 20px; line-height: 1.8;">
+        <ul>
             <li><strong>Native Escalation:</strong> Grants UID 0 and full capability sets directly via <code>execve</code> interception—no detectable user-space su daemons required.</li>
             <li><strong>Advanced VFS Masking:</strong> Defeats modern SafetyNet and Play Integrity sweeps by dropping immutable <code>-ENOENT</code> responses to <code>faccessat</code> and <code>vfs_statx</code> queries.</li>
             <li><strong>Procfs Buffer Scrubbing:</strong> Bypasses aggressive banking apps by dynamically intercepting <code>vfs_read</code> and erasing root mount traces from <code>/proc/self/mountinfo</code> in-memory.</li>
         </ul>
 
-        <h3 style="margin-top: 50px; color: var(--accent);">Target Compatibility</h3>
+        <h3>Target Compatibility</h3>
         <p>NexusSU utilizes modern Android kernel architecture. Support is divided by GKI compatibility:</p>
         
-        <table style="width: 100%; text-align: left; margin-top: 20px; border-collapse: collapse;">
-            <tr style="border-bottom: 1px solid #333;">
-                <th style="padding: 10px 0; color: var(--dim);">Kernel Version</th>
-                <th style="padding: 10px 0; color: var(--dim);">Architecture</th>
-                <th style="padding: 10px 0; color: var(--dim);">Support Type</th>
-            </tr>
-            <tr style="border-bottom: 1px solid #333;">
-                <td style="padding: 15px 0;"><strong>5.10 - 6.12 (GKI 2.0)</strong></td>
-                <td>Android 12+</td>
-                <td style="color: #64FFDA;">Full (Pre-built LKM & Boot Images)</td>
-            </tr>
-            <tr style="border-bottom: 1px solid #333;">
-                <td style="padding: 15px 0;"><strong>4.19 - 5.4 (GKI 1.0)</strong></td>
-                <td>Android 11</td>
-                <td style="color: #FFCA28;">Manual Compile (Source Injection)</td>
+        <table>
+            <tr>
+                <th>Kernel Version</th>
+                <th>Architecture</th>
+                <th>Support Type</th>
             </tr>
             <tr>
-                <td style="padding: 15px 0;"><strong>4.14 & Below</strong></td>
+                <td><strong>5.10 - 6.12 (GKI 2.0)</strong></td>
+                <td>Android 12+</td>
+                <td style="color: var(--success);">Full (Pre-built LKM & Boot Images)</td>
+            </tr>
+            <tr>
+                <td><strong>4.19 - 5.4 (GKI 1.0)</strong></td>
+                <td>Android 11</td>
+                <td style="color: var(--warning);">Manual Compile (Source Injection)</td>
+            </tr>
+            <tr>
+                <td><strong>4.14 & Below</strong></td>
                 <td>Android 10-</td>
-                <td style="color: #FF5252;">Experimental / Manual Backports</td>
+                <td style="color: var(--danger);">Experimental / Manual Backports</td>
             </tr>
         </table>
     </div>
