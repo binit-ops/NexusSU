@@ -1,5 +1,6 @@
 package com.nexussu.manager.ui
 
+import com.nexussu.manager.core.NexusEngine
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -162,7 +163,6 @@ fun SuperuserScreen() {
                 val name = pm.getApplicationLabel(info).toString()
                 if (name.isBlank() || name == info.packageName) return@mapNotNull null
                 
-                // Bulletproof System vs User App logic
                 val isBaseSystemApp = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
                 val isUpdatedSystemApp = (info.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
                 val isSystem = isBaseSystemApp || isUpdatedSystemApp
@@ -194,7 +194,6 @@ fun SuperuserScreen() {
         Text("Superuser", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(14.dp))
         
-        // Search Bar
         GlassCard(modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(16.dp)) {
             BasicTextField(
                 value = searchQuery,
@@ -266,7 +265,16 @@ fun AppRow(app: GrantedApp, onToggleRoot: (Boolean) -> Unit, onToggleExclude: (B
             
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("ROOT", color = if (app.toggledOn) p.accent else p.dim, fontSize = 9.sp, fontFamily = MonoFont, fontWeight = FontWeight.Bold)
-                GlassToggle(app.toggledOn, onCheckedChange = { onToggleRoot(it) })
+                GlassToggle(app.toggledOn, onCheckedChange = { checked ->
+                    if (checked) {
+                        // JNI BRIDGE CONNECTION
+                        if (NexusEngine.grantUidAccess(1000)) { // Note: Replace 1000 with dynamic UID lookup if needed
+                             onToggleRoot(true) 
+                        }
+                    } else {
+                        onToggleRoot(false)
+                    }
+                })
             }
         }
         
