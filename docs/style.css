@@ -1,23 +1,46 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap');
+/* 
+ * NexusSU Master Stylesheet
+ * Project: NexusSU Kernel-Level Root Documentation
+ * Purpose: Global Layout, Glassmorphism UI, and Code Window styling.
+ * Version: 1.0.0
+ */
 
+/* --- 1. VARIABLE DEFINITIONS --- */
 :root {
+    /* Base Colors */
     --bg-color: #050505;
-    --glass-bg: rgba(255, 255, 255, 0.03);
-    --glass-border: rgba(255, 255, 255, 0.08);
-    --accent: #38bdf8;
-    --accent-glow: rgba(56, 189, 248, 0.2);
     --text-main: #f8fafc;
     --text-dim: #94a3b8;
+    
+    /* Glass Effect Components */
+    --glass-bg: rgba(255, 255, 255, 0.03);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    
+    /* Brand & Accent Colors */
+    --accent: #38bdf8;
+    --accent-glow: rgba(56, 189, 248, 0.2);
+    
+    /* Status Indicators */
     --danger: #f43f5e;
     --warning: #facc15;
     --success: #34d399;
+    
+    /* Typography */
+    --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-code: 'Fira Code', 'Courier New', monospace;
+}
+
+/* --- 2. GLOBAL RESET & BASE STYLES --- */
+* {
+    box-sizing: border-box;
 }
 
 body {
     margin: 0;
-    font-family: 'Inter', -apple-system, sans-serif;
+    padding: 0;
+    font-family: var(--font-primary);
     background-color: var(--bg-color);
-    /* Subtle glowing orbs in the background */
+    /* Aesthetic Background Orbs */
     background-image: radial-gradient(circle at 15% 50%, rgba(56, 189, 248, 0.08), transparent 25%),
                       radial-gradient(circle at 85% 30%, rgba(129, 140, 248, 0.08), transparent 25%);
     background-attachment: fixed;
@@ -26,7 +49,7 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
-/* Liquid Glass Navigation */
+/* --- 3. NAVIGATION COMPONENTS --- */
 nav {
     position: sticky;
     top: 0;
@@ -63,21 +86,17 @@ nav a.active {
     box-shadow: 0 0 20px rgba(56, 189, 248, 0.1);
 }
 
-/* Core Layout */
+/* --- 4. MAIN CONTENT LAYOUT --- */
 .content {
     max-width: 800px;
     margin: 0 auto;
     padding: 80px 24px;
 }
 
-h1, h2, h3 {
-    font-weight: 700;
-    letter-spacing: -0.03em;
-    margin-top: 0;
-}
-
 h1 {
     font-size: 3.5rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
     background: linear-gradient(135deg, #f8fafc 0%, #94a3b8 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -87,6 +106,7 @@ h1 {
 
 h3 {
     font-size: 1.5rem;
+    font-weight: 700;
     color: var(--accent);
     margin-top: 64px;
     margin-bottom: 24px;
@@ -101,7 +121,7 @@ p {
     margin-bottom: 24px;
 }
 
-/* Gradient Action Button */
+/* --- 5. INTERACTIVE ELEMENTS --- */
 .button {
     display: inline-flex;
     align-items: center;
@@ -124,62 +144,112 @@ p {
     box-shadow: 0 12px 30px rgba(56, 189, 248, 0.4);
 }
 
-/* Glass Tables */
+/* --- 6. CODE WINDOW & TOOLBAR COMPONENTS --- */
+.code-window {
+    background: rgba(15, 17, 21, 0.6);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 32px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    transition: all 0.3s ease;
+}
+
+.code-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid var(--glass-border);
+    padding: 12px 16px;
+    font-size: 0.85rem;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.code-info {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+
+.file-badge {
+    color: var(--accent);
+    font-family: var(--font-code);
+    font-weight: 600;
+    background: var(--accent-glow);
+    padding: 4px 8px;
+    border-radius: 6px;
+}
+
+.add-badge {
+    color: var(--success);
+    font-weight: 700;
+    background: rgba(52, 211, 153, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.code-actions button {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-main);
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.code-actions button:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* Fullscreen Mode for Code */
+.code-window.expanded {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 9999;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    background: #0f1115;
+    margin: 0;
+}
+
+.code-window.expanded pre {
+    flex-grow: 1;
+    overflow-y: auto;
+}
+
+/* --- 7. TABLES & ALERTS --- */
 table {
     width: 100%;
     border-collapse: collapse;
     background: var(--glass-bg);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
     border: 1px solid var(--glass-border);
     border-radius: 16px;
     overflow: hidden;
     margin-top: 32px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
 }
 
 th, td {
     padding: 18px 24px;
     text-align: left;
     border-bottom: 1px solid var(--glass-border);
+    color: var(--text-dim);
 }
 
 th {
     font-weight: 600;
     color: var(--text-main);
-    font-size: 0.9rem;
     background: rgba(255, 255, 255, 0.02);
 }
 
-td {
-    color: var(--text-dim);
-    font-size: 0.95rem;
-}
-
-/* Code Blocks & Inline Code */
-code {
-    font-family: 'Fira Code', monospace !important;
-}
-
-:not(pre) > code {
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    padding: 4px 8px;
-    border-radius: 6px;
-    font-size: 0.85em;
-    color: var(--accent);
-}
-
-pre {
-    background: #0f1115 !important;
-    border: 1px solid var(--glass-border) !important;
-    border-radius: 16px !important;
-    padding: 24px !important;
-    box-shadow: inset 0 2px 15px rgba(0,0,0,0.4) !important;
-    margin-bottom: 32px !important;
-}
-
-/* Info & Warning Panels */
 .alert-panel {
     background: rgba(250, 204, 21, 0.05);
     border: 1px solid rgba(250, 204, 21, 0.1);
@@ -188,17 +258,10 @@ pre {
     padding: 24px;
     margin: 40px 0;
     backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
 }
 
-.alert-panel p {
-    margin: 0;
-    color: rgba(255,255,255,0.8);
-}
-
-.alert-panel strong {
-    color: var(--warning);
-    display: block;
-    margin-bottom: 8px;
-    font-size: 1.1rem;
+/* --- 8. MOBILE OPTIMIZATION --- */
+@media (max-width: 600px) {
+    h1 { font-size: 2.5rem; }
+    .content { padding: 40px 20px; }
 }
