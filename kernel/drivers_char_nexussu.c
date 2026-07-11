@@ -2,6 +2,7 @@
 #include <linux/uaccess.h>
 #include <linux/nexussu.h>
 #include <linux/module.h>
+#include <linux/miscdevice.h>
 
 #define NEXUSSU_IOC_MAGIC 'N'
 #define NEXUSSU_ALLOW_UID _IOW(NEXUSSU_IOC_MAGIC, 1, uid_t)
@@ -44,8 +45,28 @@ static const struct file_operations nexussu_fops = {
     .compat_ioctl = nexussu_ioctl,
 };
 
+/* Define the misc device so /dev/nexussu is automatically created */
+static struct miscdevice nexussu_dev = {
+    .minor = MISC_DYNAMIC_MINOR,
+    .name = "nexussu",           /* Creates /dev/nexussu */
+    .fops = &nexussu_fops,
+    .mode = 0666,                /* Allow Manager App to read/write */
+};
+
 static int __init nexussu_init(void) {
-    /* Registration logic for the character device */
+    /* Register the character device */
+    int ret = misc_register(&nexussu_dev);
+    if (ret) {
+        printk(KERN_ERR "NexusSU: Failed to register misc device\n");
+        return ret;
+    }
+    printk(KERN_INFO "NexusSU: Kernel engine initialized at /dev/nexussu\n");
     return 0;
 }
+
+static void __exit nexussu_exit(void) {
+    misc_deregister(&nexussu_dev);
+}
+
 module_init(nexussu_init);
+module_exit(nexussu_exit);
