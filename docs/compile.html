@@ -50,10 +50,17 @@ echo "obj-y += nexussu.o" >> drivers/char/Makefile
                 <div class="code-actions"><button onclick="copyCode(this)">📋 Copy</button></div>
             </div>
             <pre><code class="language-bash">
-export PATH="$HOME/toolchain/bin:$PATH"
+# Clean the build directory
 make clean && make mrproper
-make vendor/your_device_defconfig O=out
-make -j8 O=out
+
+# Generate the config targeting ARM64
+make ARCH=arm64 vendor/your_device_defconfig O=out
+
+# Compile the kernel with the cross-compiler installed in Step 1
+make -j$(nproc --all) \
+    O=out \
+    ARCH=arm64 \
+    CROSS_COMPILE=aarch64-linux-gnu-
             </code></pre>
         </div>
     </div>
