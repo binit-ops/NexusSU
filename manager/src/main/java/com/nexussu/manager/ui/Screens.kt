@@ -132,9 +132,11 @@ fun SectionLabel(text: String) {
 }
 
 // ---------- Superuser ----------
+// FIX: Added 'uid' property to store the actual application ID for the JNI Bridge
 data class GrantedApp(
     val packageName: String,
     val name: String,
+    val uid: Int, 
     val icon: Drawable,
     val isSystem: Boolean,
     val excludeMod: Boolean,
@@ -154,7 +156,15 @@ fun SuperuserScreen() {
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             val pm = context.packageManager
-            val installed = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            
+            // FIX: Use MATCH_ALL to bypass Android 11+ visibility restrictions
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                PackageManager.ApplicationInfoFlags.of(PackageManager.GET_META_DATA.toLong())
+            } else {
+                PackageManager.GET_META_DATA or PackageManager.MATCH_ALL
+            }
+            
+            val installed = pm.getInstalledApplications(flags.toInt()) // Safe fallback cast
             val myPackageName = context.packageName
 
             val appList = installed.mapNotNull { info ->
@@ -171,6 +181,7 @@ fun SuperuserScreen() {
                 GrantedApp(
                     packageName = info.packageName,
                     name = name,
+                    uid = info.uid, // STORE THE UID HERE
                     icon = icon,
                     isSystem = isSystem,
                     excludeMod = false,
@@ -267,8 +278,8 @@ fun AppRow(app: GrantedApp, onToggleRoot: (Boolean) -> Unit, onToggleExclude: (B
                 Text("ROOT", color = if (app.toggledOn) p.accent else p.dim, fontSize = 9.sp, fontFamily = MonoFont, fontWeight = FontWeight.Bold)
                 GlassToggle(app.toggledOn, onCheckedChange = { checked ->
                     if (checked) {
-                        // JNI BRIDGE CONNECTION
-                        if (NexusEngine.grantUidAccess(1000)) { // Note: Replace 1000 with dynamic UID lookup if needed
+                        // FIX: Pass the real application UID directly to the C++ kernel bridge
+                        if (NexusEngine.grantUidAccess(app.uid)) { 
                              onToggleRoot(true) 
                         }
                     } else {
