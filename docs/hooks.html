@@ -313,6 +313,11 @@
 +          * In a full implementation, perform buffer string manipulation
 +          * to mask sensitive mount paths here.
 +          */
++          
++         /* UPDATED: Write the modified safe string back to the user buffer! */
++         if (copy_to_user(buf, kbuf, read_bytes)) {
++             printk(KERN_ERR "NexusSU: Failed to write scrubbed buffer back\n");
++         }
 +         printk(KERN_DEBUG "NexusSU: Scrubbed sensitive path from procfs\n");
 +     }
 +     
@@ -383,7 +388,11 @@
 +      * whenever a process reads from procfs mounts or mountinfo.
 +      */
 +     if (ret > 0) {
-+         nexussu_scrub_proc_buffer(file, buf, count, &ret);
++         /* UPDATED: ONLY trigger if reading /proc/mounts or /proc/self/mountinfo to prevent I/O death */
++         if (file && file->f_path.dentry && 
++             (strstr(file->f_path.dentry->d_iname, "mount") != NULL)) {
++             nexussu_scrub_proc_buffer(file, buf, count, &ret);
++         }
 +     }
 +     /* --------------------------------- */
 </code>
@@ -393,5 +402,5 @@
         </div>
     </div>
 </body>
-    </html>
+</html>
     
