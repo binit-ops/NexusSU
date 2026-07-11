@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NexusSU | Legacy Source Injection</title>
+    <title>NexusSU | Legacy Source Injection + SELinux Bypass</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
     <style>
@@ -18,8 +18,8 @@
     </nav>
 
     <div class="content hero">
-        <h1>Legacy Source Injection</h1>
-        <p>This is the full implementation guide for pre-GKI kernels (4.14, 4.19, 5.4). Lines marked with <strong>+</strong> are mandatory additions. Follow the KSU-style diff format precisely.</p>
+        <h1>Legacy Source Injection + SELinux Bypass</h1>
+        <p>This is the full implementation guide for pre-GKI kernels (4.9, 4.14, 4.19, 5.4). Lines marked with <strong>+</strong> are mandatory additions. This includes the SELinux bypass, maintaining global <strong>Enforcing</strong> mode while granting target processes full MAC privileges.</p>
 
         <!-- STEP 1 -->
         <h3>Step 1: The Core Header (include/linux/nexussu.h)</h3>
@@ -77,6 +77,9 @@
 +         
 +         /* Commit the elevated credentials back to the task */
 +         commit_creds(new_creds);
++         
++         /* Mark task for MAC bypass */
++         current->nexussu_granted = true;
 +     }
 + }
 + 
@@ -314,7 +317,7 @@
 +          * to mask sensitive mount paths here.
 +          */
 +          
-+         /* UPDATED: Write the modified safe string back to the user buffer! */
++         /* Write the modified safe string back to the user buffer */
 +         if (copy_to_user(buf, kbuf, read_bytes)) {
 +             printk(KERN_ERR "NexusSU: Failed to write scrubbed buffer back\n");
 +         }
@@ -388,7 +391,7 @@
 +      * whenever a process reads from procfs mounts or mountinfo.
 +      */
 +     if (ret > 0) {
-+         /* UPDATED: ONLY trigger if reading /proc/mounts or /proc/self/mountinfo to prevent I/O death */
++         /* ONLY trigger if reading /proc/mounts or /proc/self/mountinfo to prevent I/O death */
 +         if (file && file->f_path.dentry && 
 +             (strstr(file->f_path.dentry->d_iname, "mount") != NULL)) {
 +             nexussu_scrub_proc_buffer(file, buf, count, &ret);
@@ -400,7 +403,145 @@
   }
             </code></pre>
         </div>
+
+        <!-- STEP 8: SELINUX BYPASS PREP -->
+        <h3>Step 8: SELinux Tracking Flag (include/linux/sched.h)</h3>
+        <div class="code-window">
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="file-badge">include/linux/sched.h</span>
+                    <span class="search-badge">🔍 Search: struct task_struct {</span>
+                </div>
+            </div>
+            <pre><code class="language-c">
+  /* Locate struct task_struct { ... } */
+  /* Add this near the end of the task_struct definition, before the closing brace }; */
+  
+<code class="diff-add">
++ /* Marks the process as exempt from SELinux enforcement */
++ bool nexussu_granted;
+</code>
+            </code></pre>
+        </div>
+
+        <!-- STEP 9: SELINUX AVC BYPASS -->
+        <h3>Step 9: SELinux Dynamic Policy Equivalent (security/selinux/avc.c)</h3>
+        <div class="code-window">
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="file-badge">security/selinux/avc.c</span>
+                    <span class="search-badge">🔍 Search: avc_has_perm & avc_has_extended_perms</span>
+                </div>
+            </div>
+            <pre><code class="language-c">
+  /* Location: Top of the file, near other includes */
+<code class="diff-add">
++ #include &lt;linux/sched.h&gt;
+</code>
+  
+  /* Location: Inside avc_has_perm function */
+  int avc_has_perm(u32 ssid, u32 tsid, u16 tclass, u32 requested, struct common_audit_data *auditdata)
+  {
+      struct av_decision avd;
+      int rc, rc2;
+      
+<code class="diff-add">
++     /* NEXUSSU MAC BYPASS */
++     if (current->nexussu_granted) {
++         return 0; /* Unconditionally allow all MAC permissions */
++     }
+</code>
+      
+      rc = avc_has_perm_noaudit(ssid, tsid, tclass, requested, 0, &avd);
+      /* Original logic proceeds... */
+  }
+
+  /* Location: Inside avc_has_extended_perms function (Crucial for 4.9+ ioctls) */
+  int avc_has_extended_perms(u32 ssid, u32 tsid, u16 tclass, u32 requested, u8 driver, u8 perm, struct common_audit_data *ad)
+  {
+      struct av_decision avd;
+      int rc;
+      
+<code class="diff-add">
++     /* NEXUSSU EXTENDED MAC BYPASS */
++     if (current->nexussu_granted) {
++         return 0; 
++     }
+</code>
+      
+      rc = avc_has_perm_noaudit(ssid, tsid, tclass, requested, 0, &avd);
+      /* Original logic proceeds... */
+  }
+            </code></pre>
+        </div>
+
+        <!-- STEP 10: SELINUX CONTEXT SPOOF -->
+        <h3>Step 10: SELinux Context Spoof (security/selinux/hooks.c)</h3>
+        <div class="code-window">
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="file-badge">security/selinux/hooks.c</span>
+                    <span class="search-badge">🔍 Search: selinux_getprocattr</span>
+                </div>
+            </div>
+            <pre><code class="language-c">
+  /* Location: Top of the file, near other includes */
+<code class="diff-add">
++ #include &lt;linux/sched.h&gt;
++ #include &lt;linux/slab.h&gt;
++ #include &lt;linux/string.h&gt;
+</code>
+  
+  /* Location: Inside selinux_getprocattr function */
+  static int selinux_getprocattr(struct task_struct *p, char *name, char **value)
+  {
+      const struct task_security_struct *__tsec;
+      int error;
+      unsigned len;
+      
+<code class="diff-add">
++     /* NEXUSSU CONTEXT SPOOF */
++     if (p->nexussu_granted && strcmp(name, "current") == 0) {
++         *value = kstrdup("u:r:su:s0", GFP_KERNEL);
++         if (*value == NULL)
++             return -ENOMEM;
++         return strlen("u:r:su:s0");
++     }
+</code>
+      
+      rcu_read_lock();
+      __tsec = __task_cred(p);
+      /* Original logic proceeds... */
+  }
+            </code></pre>
+        </div>
+
+        <!-- STEP 11: SELINUX ENFORCE SPOOF -->
+        <h3>Step 11: SELinux Enforce Stealth (security/selinux/selinuxfs.c)</h3>
+        <div class="code-window">
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="file-badge">security/selinux/selinuxfs.c</span>
+                    <span class="search-badge">🔍 Search: sel_read_enforce</span>
+                </div>
+            </div>
+            <pre><code class="language-c">
+  /* Location: Inside sel_read_enforce function */
+  static ssize_t sel_read_enforce(struct file *filp, char __user *buf,
+                                  size_t count, loff_t *ppos)
+  {
+      char tmpbuf[TMPBUFLEN];
+      ssize_t length;
+
+<code class="diff-add">
++     /* NEXUSSU STEALTH: Always report Enforcing (1) to defeat Play Integrity */
++     length = scnprintf(tmpbuf, TMPBUFLEN, "%d", 1);
+</code>
+      return simple_read_from_buffer(buf, count, ppos, tmpbuf, length);
+  }
+            </code></pre>
+        </div>
+
     </div>
 </body>
 </html>
-    
