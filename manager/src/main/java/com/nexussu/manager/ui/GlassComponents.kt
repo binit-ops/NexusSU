@@ -210,7 +210,7 @@ fun LiquidTabBar(selected: Tab, onSelect: (Tab) -> Unit, modifier: Modifier = Mo
             
             Box(
                 Modifier
-                    .offset(x = indicatorOffset)
+                    .graphicsLayer { translationX = indicatorOffset.toPx() }
                     .width(tabWidth)
                     .fillMaxHeight()
                     .padding(horizontal = 10.dp, vertical = 12.dp)
@@ -254,7 +254,13 @@ fun GlassToggle(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: 
             .clickable(remember { MutableInteractionSource() }, indication = null) { onCheckedChange(!checked) }
             .padding(2.dp)
     ) {
-        Box(Modifier.offset(x = knob).size(18.dp).clip(CircleShape).background(Color.White))
+        Box(
+            Modifier
+                .graphicsLayer { translationX = knob.toPx() }
+                .size(18.dp)
+                .clip(CircleShape)
+                .background(Color.White)
+        )
     }
 }
 
@@ -266,8 +272,12 @@ fun GlassSegmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit
             val segWidth = maxWidth / options.size
             val offset by animateDpAsState(segWidth * selected, spring(dampingRatio = 0.8f), label = "seg")
             Box(
-                Modifier.offset(x = offset).width(segWidth).fillMaxHeight()
-                    .clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(p.accent, p.accent2)))
+                Modifier
+                    .graphicsLayer { translationX = offset.toPx() }
+                    .width(segWidth)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Brush.linearGradient(listOf(p.accent, p.accent2)))
             )
             Row(Modifier.fillMaxSize()) {
                 options.forEachIndexed { i, label ->
