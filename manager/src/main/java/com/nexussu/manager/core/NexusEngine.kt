@@ -23,4 +23,12 @@ object NexusEngine {
      * Fetches the active engine version from the kernel space.
      */
     external fun getEngineVersion(): Int
+
+    /**
+     * Returns true if the NexusSU kernel engine is active and running.
+     */
+    fun isKernelActive(): Boolean {
+        // We expect version 100 based on the kernel's ENGINE_VERSION constant
+        return getEngineVersion() == 100
+    }
 }
