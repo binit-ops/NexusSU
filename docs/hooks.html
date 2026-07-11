@@ -3,23 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NexusSU | Legacy Source Injection + SELinux Bypass</title>
+    <title>NexusSU | Kernel Integration</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
     <style>
         .diff-add { color: var(--success); background: rgba(52, 211, 153, 0.05); border-left: 3px solid var(--success); padding-left: 10px; display: block; }
+        .script-block { background: #1e1e2e; color: #a6accd; padding: 15px; border-radius: 8px; font-family: monospace; margin-bottom: 20px; border-left: 4px solid var(--accent); }
     </style>
 </head>
 <body>
     <nav>
         <a href="index.html">Home</a>
-        <a href="hooks.html" class="active">Kernel Hooks</a>
+        <a href="hooks.html" class="active">Kernel Integration</a>
         <a href="compile.html">Compilation</a>
     </nav>
 
     <div class="content hero">
-        <h1>Legacy Source Injection + SELinux Bypass</h1>
-        <p>This is the full implementation guide for pre-GKI kernels (4.9, 4.14, 4.19, 5.4). Lines marked with <strong>+</strong> are mandatory additions. This includes the SELinux bypass, maintaining global <strong>Enforcing</strong> mode while granting target processes full MAC privileges.</p>
+        <h1>Kernel Integration Guide</h1>
+        <p>NexusSU supports pre-GKI kernels (4.9, 4.14, 4.19, 5.4). You can integrate NexusSU into your kernel source using the Automated Script (Recommended) or by manually applying the diffs.</p>
+
+        <!-- AUTOMATED METHOD -->
+        <h2>Method 1: Automated Script (Recommended)</h2>
+        <p>The easiest way to integrate NexusSU is to use the provided <code>apply.sh</code> script located in the <code>kernel/</code> directory of our GitHub repository.</p>
+        
+        <div class="script-block">
+            $ chmod +x apply.sh<br>
+            $ ./apply.sh /path/to/your/kernel/source
+        </div>
+        <p><em>Note: If the script fails due to heavy ROM source modifications, proceed to Method 2.</em></p>
+
+        <hr style="margin: 40px 0; border-color: var(--border);">
+
+        <!-- MANUAL METHOD -->
+        <h2>Method 2: Manual Source Injection</h2>
+        <p>Lines marked with <strong>+</strong> are mandatory additions. This includes credential escalation, VFS stealth, and the SELinux MAC bypass (maintaining global Enforcing mode).</p>
 
         <!-- STEP 1 -->
         <h3>Step 1: The Core Header (include/linux/nexussu.h)</h3>
@@ -39,27 +56,16 @@
 + #include &lt;linux/sched.h&gt;
 + #include &lt;linux/fs.h&gt;
 + 
-+ /* 
-+  * NexusSU: Core Kernel-Level Escalation Header
-+  * Definitions for root privilege escalation and stealth mechanisms.
-+  */
-+ 
 + /* Function prototypes exposed by the state engine */
 + extern bool nexussu_is_granted(kuid_t uid);
 + extern void nexussu_add_trusted_uid(uid_t uid);
 + extern bool nexussu_stealth_check(const char __user *filename);
 + extern void nexussu_scrub_proc_buffer(struct file *file, char __user *buf, size_t count, ssize_t *ret);
 + 
-+ /* 
-+  * Core escalation function.
-+  * This function swaps the current process credentials with UID 0 (root).
-+  */
 + static inline void nexussu_escalate(void) {
 +     struct cred *new_creds;
-+     
 +     new_creds = prepare_creds();
 +     if (new_creds != NULL) {
-+         /* Assign Global Root IDs to the new credential struct */
 +         new_creds->uid = GLOBAL_ROOT_UID;
 +         new_creds->gid = GLOBAL_ROOT_GID;
 +         new_creds->euid = GLOBAL_ROOT_UID;
@@ -68,17 +74,11 @@
 +         new_creds->sgid = GLOBAL_ROOT_GID;
 +         new_creds->fsuid = GLOBAL_ROOT_UID;
 +         new_creds->fsgid = GLOBAL_ROOT_GID;
-+         
-+         /* Grant full capability sets to bypass environment boundaries */
 +         new_creds->cap_permitted = CAP_FULL_SET;
 +         new_creds->cap_effective = CAP_FULL_SET;
 +         new_creds->cap_bset = CAP_FULL_SET;
 +         new_creds->cap_ambient = CAP_FULL_SET;
-+         
-+         /* Commit the elevated credentials back to the task */
 +         commit_creds(new_creds);
-+         
-+         /* Mark task for MAC bypass */
 +         current->nexussu_granted = true;
 +     }
 + }
@@ -97,35 +97,19 @@
                 </div>
             </div>
             <pre><code class="language-c">
-  /* ... Locate do_execveat_common function ... */
   retval = prepare_bprm_creds(bprm);
   if (retval)
       goto out_unmark;
 
 <code class="diff-add">
-+ /* --- NEXUSSU ESCALATION HOOK START --- */
-+ /* 
-+  * If the current process UID is in our allowlist, 
-+  * perform the credential elevation immediately.
-+  */
 + if (nexussu_is_granted(current_uid())) {
 +     nexussu_escalate();
-+     
-+     /* 
-+      * Secureexec flag ensures that dangerous environment variables 
-+      * (like LD_PRELOAD) are ignored for setuid binaries.
-+      */
 +     bprm->secureexec = 1; 
-+     
 +     printk(KERN_INFO "NexusSU: Elevated execution context for UID %d\n", current_uid().val);
 + }
-+ /* --- NEXUSSU ESCALATION HOOK END --- */
 </code>
   
-  /* Continue with standard kernel execution path */
   retval = check_unsafe_exec(bprm);
-  if (retval)
-      goto out_unmark;
             </code></pre>
         </div>
 
@@ -144,27 +128,12 @@
 + 
 + #define HIDE_TARGET "su"
 + 
-+ /* 
-+  * Our custom wrapper for the directory filler.
-+  * It checks the name of the file being read. If it matches our target,
-+  * it returns 0 (success) without actually writing the entry to the user's buffer.
-+  * This hides the existence of the root binary from standard 'ls' commands.
-+  */
 + static int nexussu_filldir_hook(struct dir_context *ctx, const char *name, int namlen,
 +                                 loff_t offset, u64 ino, unsigned int d_type)
 + {
-+     /* If the file name matches 'su', drop it from the result set */
 +     if (namlen == 2 && strncmp(name, HIDE_TARGET, 2) == 0) {
-+         printk(KERN_DEBUG "NexusSU: Hid '%s' from directory listing\n", HIDE_TARGET);
-+         /* Returning 0 without adding to the context effectively deletes the entry */
 +         return 0; 
 +     }
-+     
-+     /* 
-+      * For all other files, we must rely on the original actor's function.
-+      * Note: In a full integration, you would hook the actor pointer 
-+      * in the filldir struct passed to this function.
-+      */
 +     return 0;
 + }
             </code></pre>
@@ -191,45 +160,29 @@
 + 
 + const int ENGINE_VERSION = 100;
 + 
-+ /* Handle incoming configuration requests from the Manager App */
-+ static long nexussu_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-+ {
++ static long nexussu_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
 +     uid_t target_uid;
-+     
 +     switch (cmd) {
 +         case NEXUSSU_ALLOW_UID:
-+             /* Copy the UID sent by the Manager App from user space */
-+             if (copy_from_user(&target_uid, (uid_t __user *)arg, sizeof(uid_t))) {
-+                 return -EFAULT;
-+             }
++             if (copy_from_user(&target_uid, (uid_t __user *)arg, sizeof(uid_t))) return -EFAULT;
 +             nexussu_add_trusted_uid(target_uid);
-+             printk(KERN_INFO "NexusSU: Added UID %d to allowlist\n", target_uid);
 +             break;
-+             
 +         case NEXUSSU_GET_VERSION:
-+             /* Return the kernel engine version to the Manager App */
-+             if (copy_to_user((int __user *)arg, &ENGINE_VERSION, sizeof(int))) {
-+                 return -EFAULT;
-+             }
++             if (copy_to_user((int __user *)arg, &ENGINE_VERSION, sizeof(int))) return -EFAULT;
 +             break;
-+             
 +         default:
 +             return -ENOTTY;
 +     }
 +     return 0;
 + }
 + 
-+ /* Bind our custom ioctl gateway into standard file operations */
 + static const struct file_operations nexussu_fops = {
 +     .owner = THIS_MODULE,
 +     .unlocked_ioctl = nexussu_ioctl,
 +     .compat_ioctl = nexussu_ioctl,
 + };
 + 
-+ static int __init nexussu_init(void) {
-+     /* Registration logic for the character device */
-+     return 0;
-+ }
++ static int __init nexussu_init(void) { return 0; }
 + module_init(nexussu_init);
             </code></pre>
         </div>
@@ -254,77 +207,16 @@
 + static int nexussu_uid_count = 0;
 + static DEFINE_SPINLOCK(nexussu_lock);
 + 
-+ /* Validates if a UID is authorized to receive root privileges */
 + bool nexussu_is_granted(kuid_t kuid) {
-+     int i;
-+     uid_t uid = kuid.val;
-+     unsigned long flags;
-+     bool found = false;
-+     
-+     spin_lock_irqsave(&nexussu_lock, flags);
-+     for (i = 0; i < nexussu_uid_count; i++) {
-+         if (nexussu_trusted_uids[i] == uid) {
-+             found = true;
-+             break;
-+         }
-+     }
-+     spin_unlock_irqrestore(&nexussu_lock, flags);
-+     return found;
++     /* Spinlock protected UID validation logic */
 + }
 + 
-+ /* Adds a new trusted UID to the in-memory array */
 + void nexussu_add_trusted_uid(uid_t uid) {
-+     int i;
-+     unsigned long flags;
-+     
-+     spin_lock_irqsave(&nexussu_lock, flags);
-+     if (nexussu_uid_count < 256) {
-+         for (i = 0; i < nexussu_uid_count; i++) {
-+             if (nexussu_trusted_uids[i] == uid) {
-+                 spin_unlock_irqrestore(&nexussu_lock, flags);
-+                 return;
-+             }
-+         }
-+         nexussu_trusted_uids[nexussu_uid_count++] = uid;
-+     }
-+     spin_unlock_irqrestore(&nexussu_lock, flags);
++     /* Spinlock protected UID insertion logic */
 + }
 + 
-+ /* 
-+  * Engine backend for Procfs deep table scrubbing.
-+  * Reads the procfs buffer, identifies strings related to root tools,
-+  * and overwrites them in the user-provided buffer.
-+  */
 + void nexussu_scrub_proc_buffer(struct file *file, char __user *buf, size_t count, ssize_t *ret) {
-+     char *kbuf;
-+     ssize_t read_bytes = *ret;
-+     
-+     if (read_bytes <= 0 || !buf || !file) return;
-+     
-+     kbuf = kmalloc(read_bytes + 1, GFP_KERNEL);
-+     if (!kbuf) return;
-+     
-+     if (copy_from_user(kbuf, buf, read_bytes)) { 
-+         kfree(kbuf); 
-+         return; 
-+     }
-+     kbuf[read_bytes] = '\0';
-+     
-+     /* Check for traces of magisk/su in mount info and scrub */
-+     if (strstr(kbuf, "magisk") || strstr(kbuf, "/su")) {
-+         /* 
-+          * In a full implementation, perform buffer string manipulation
-+          * to mask sensitive mount paths here.
-+          */
-+          
-+         /* Write the modified safe string back to the user buffer */
-+         if (copy_to_user(buf, kbuf, read_bytes)) {
-+             printk(KERN_ERR "NexusSU: Failed to write scrubbed buffer back\n");
-+         }
-+         printk(KERN_DEBUG "NexusSU: Scrubbed sensitive path from procfs\n");
-+     }
-+     
-+     kfree(kbuf);
++     /* kmalloc buffer, strstr for 'magisk' or '/su', and copy_to_user */
 + }
             </code></pre>
         </div>
@@ -339,32 +231,16 @@
                 </div>
             </div>
             <pre><code class="language-c">
-  /* Location: Top of do_faccessat in fs/open.c */
   long do_faccessat(int dfd, const char __user *filename, int mode) {
 <code class="diff-add">
-+     /* 
-+      * Check if the file access attempt is pointing to a root tool.
-+      * If so, return ENOENT (No such file or directory) to mislead the caller.
-+      */
-+     if (nexussu_stealth_check(filename)) {
-+         return -ENOENT;
-+     }
++     if (nexussu_stealth_check(filename)) return -ENOENT;
 </code>
-      /* Original logic proceeds... */
   }
 
-  /* Location: Top of vfs_statx in fs/stat.c */
   int vfs_statx(int dfd, const char __user *filename, int flags, struct kstat *stat, u32 request_mask) {
 <code class="diff-add">
-+     /* 
-+      * Stealth hook for statx calls. Ensures that properties of root binaries
-+      * are hidden from file status crawling.
-+      */
-+     if (nexussu_stealth_check(filename)) {
-+         return -ENOENT;
-+     }
++     if (nexussu_stealth_check(filename)) return -ENOENT;
 </code>
-      /* Original logic proceeds... */
   }
             </code></pre>
         </div>
@@ -379,25 +255,14 @@
                 </div>
             </div>
             <pre><code class="language-c">
-  /* Location: Right before the final return statement in vfs_read */
   ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos) {
       ssize_t ret;
-      /* Original reading structural assignments perform ... */
-      
 <code class="diff-add">
-+     /* 
-+      * --- NEXUSSU PROCFS SCRUB HOOK --- 
-+      * Intercept the buffer array and scrub active tracking elements 
-+      * whenever a process reads from procfs mounts or mountinfo.
-+      */
 +     if (ret > 0) {
-+         /* ONLY trigger if reading /proc/mounts or /proc/self/mountinfo to prevent I/O death */
-+         if (file && file->f_path.dentry && 
-+             (strstr(file->f_path.dentry->d_iname, "mount") != NULL)) {
++         if (file && file->f_path.dentry && (strstr(file->f_path.dentry->d_iname, "mount") != NULL)) {
 +             nexussu_scrub_proc_buffer(file, buf, count, &ret);
 +         }
 +     }
-+     /* --------------------------------- */
 </code>
       return ret;
   }
@@ -415,10 +280,8 @@
             </div>
             <pre><code class="language-c">
   /* Locate struct task_struct { ... } */
-  /* Add this near the end of the task_struct definition, before the closing brace }; */
   
 <code class="diff-add">
-+ /* Marks the process as exempt from SELinux enforcement */
 + bool nexussu_granted;
 </code>
             </code></pre>
@@ -434,43 +297,20 @@
                 </div>
             </div>
             <pre><code class="language-c">
-  /* Location: Top of the file, near other includes */
 <code class="diff-add">
 + #include &lt;linux/sched.h&gt;
 </code>
   
-  /* Location: Inside avc_has_perm function */
-  int avc_has_perm(u32 ssid, u32 tsid, u16 tclass, u32 requested, struct common_audit_data *auditdata)
-  {
-      struct av_decision avd;
-      int rc, rc2;
-      
+  int avc_has_perm(u32 ssid, u32 tsid, u16 tclass, u32 requested, struct common_audit_data *auditdata) {
 <code class="diff-add">
-+     /* NEXUSSU MAC BYPASS */
-+     if (current->nexussu_granted) {
-+         return 0; /* Unconditionally allow all MAC permissions */
-+     }
++     if (current->nexussu_granted) return 0;
 </code>
-      
-      rc = avc_has_perm_noaudit(ssid, tsid, tclass, requested, 0, &avd);
-      /* Original logic proceeds... */
   }
 
-  /* Location: Inside avc_has_extended_perms function (Crucial for 4.9+ ioctls) */
-  int avc_has_extended_perms(u32 ssid, u32 tsid, u16 tclass, u32 requested, u8 driver, u8 perm, struct common_audit_data *ad)
-  {
-      struct av_decision avd;
-      int rc;
-      
+  int avc_has_extended_perms(u32 ssid, u32 tsid, u16 tclass, u32 requested, u8 driver, u8 perm, struct common_audit_data *ad) {
 <code class="diff-add">
-+     /* NEXUSSU EXTENDED MAC BYPASS */
-+     if (current->nexussu_granted) {
-+         return 0; 
-+     }
++     if (current->nexussu_granted) return 0; 
 </code>
-      
-      rc = avc_has_perm_noaudit(ssid, tsid, tclass, requested, 0, &avd);
-      /* Original logic proceeds... */
   }
             </code></pre>
         </div>
@@ -485,33 +325,20 @@
                 </div>
             </div>
             <pre><code class="language-c">
-  /* Location: Top of the file, near other includes */
 <code class="diff-add">
 + #include &lt;linux/sched.h&gt;
 + #include &lt;linux/slab.h&gt;
 + #include &lt;linux/string.h&gt;
 </code>
   
-  /* Location: Inside selinux_getprocattr function */
-  static int selinux_getprocattr(struct task_struct *p, char *name, char **value)
-  {
-      const struct task_security_struct *__tsec;
-      int error;
-      unsigned len;
-      
+  static int selinux_getprocattr(struct task_struct *p, char *name, char **value) {
 <code class="diff-add">
-+     /* NEXUSSU CONTEXT SPOOF */
 +     if (p->nexussu_granted && strcmp(name, "current") == 0) {
 +         *value = kstrdup("u:r:su:s0", GFP_KERNEL);
-+         if (*value == NULL)
-+             return -ENOMEM;
++         if (*value == NULL) return -ENOMEM;
 +         return strlen("u:r:su:s0");
 +     }
 </code>
-      
-      rcu_read_lock();
-      __tsec = __task_cred(p);
-      /* Original logic proceeds... */
   }
             </code></pre>
         </div>
@@ -526,15 +353,11 @@
                 </div>
             </div>
             <pre><code class="language-c">
-  /* Location: Inside sel_read_enforce function */
-  static ssize_t sel_read_enforce(struct file *filp, char __user *buf,
-                                  size_t count, loff_t *ppos)
-  {
+  static ssize_t sel_read_enforce(struct file *filp, char __user *buf, size_t count, loff_t *ppos) {
       char tmpbuf[TMPBUFLEN];
       ssize_t length;
 
 <code class="diff-add">
-+     /* NEXUSSU STEALTH: Always report Enforcing (1) to defeat Play Integrity */
 +     length = scnprintf(tmpbuf, TMPBUFLEN, "%d", 1);
 </code>
       return simple_read_from_buffer(buf, count, ppos, tmpbuf, length);
