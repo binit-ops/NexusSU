@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -71,7 +72,8 @@ fun NexusSUApp(
                     .hazeSource(state = hazeState)
             ) { LiquidBlobs() }
 
-            Column(Modifier.fillMaxSize().padding(16.dp)) {
+            // FIX: Added systemBarsPadding() to prevent UI from hiding behind the camera/nav pill
+            Column(Modifier.fillMaxSize().systemBarsPadding().padding(16.dp)) {
                 Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text(buildAnnotatedString {
                         withStyle(SpanStyle(color = p.ink)) { append("Nexus") }
@@ -116,8 +118,29 @@ fun LiquidBlobs() {
     val p = LocalNexusPalette.current
     val infinite = rememberInfiniteTransition(label = "blobs")
     val d by infinite.animateFloat(0f, 1f, infiniteRepeatable(tween(17000, easing = LinearEasing), RepeatMode.Reverse), label = "d")
+    
     Box(Modifier.fillMaxSize()) {
-        Box(Modifier.offset(x = (-60 + d * 40).dp, y = (-60 + d * 30).dp).size(300.dp).blur(70.dp).background(p.accent.copy(alpha = 0.5f), CircleShape))
-        Box(Modifier.align(Alignment.BottomEnd).offset(x = (60 - d * 30).dp, y = (60 - d * 40).dp).size(260.dp).blur(70.dp).background(p.accent2.copy(alpha = 0.5f), CircleShape))
+        // FIX: Moved translations to graphicsLayer to prevent continuous layout recomposition
+        Box(
+            Modifier
+                .graphicsLayer {
+                    translationX = (-60 + d * 40).dp.toPx()
+                    translationY = (-60 + d * 30).dp.toPx()
+                }
+                .size(300.dp)
+                .blur(70.dp)
+                .background(p.accent.copy(alpha = 0.5f), CircleShape)
+        )
+        Box(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .graphicsLayer {
+                    translationX = (60 - d * 30).dp.toPx()
+                    translationY = (60 - d * 40).dp.toPx()
+                }
+                .size(260.dp)
+                .blur(70.dp)
+                .background(p.accent2.copy(alpha = 0.5f), CircleShape)
+        )
     }
 }
