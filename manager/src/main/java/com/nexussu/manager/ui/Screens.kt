@@ -9,6 +9,8 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -48,22 +50,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch 
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 // Convert Native App Icon to Jetpack Compose Image
 fun Drawable.toImageBitmap(): androidx.compose.ui.graphics.ImageBitmap {
     if (this is BitmapDrawable) {
         val bmp = this.bitmap
-        if (bmp != null) {
-            return bmp.asImageBitmap()
-        }
+        if (bmp != null) return bmp.asImageBitmap()
     }
-    val bitmap = Bitmap.createBitmap(
-        if (intrinsicWidth > 0) intrinsicWidth else 96,
-        if (intrinsicHeight > 0) intrinsicHeight else 96,
-        Bitmap.Config.ARGB_8888
-    )
+    val bitmap = Bitmap.createBitmap(if (intrinsicWidth > 0) intrinsicWidth else 96, if (intrinsicHeight > 0) intrinsicHeight else 96, Bitmap.Config.ARGB_8888)
     val canvas = android.graphics.Canvas(bitmap)
     setBounds(0, 0, canvas.width, canvas.height)
     draw(canvas)
@@ -74,11 +71,13 @@ fun Drawable.toImageBitmap(): androidx.compose.ui.graphics.ImageBitmap {
 @Composable
 fun HomeScreen(onOpenAdvanced: () -> Unit) {
     val p = LocalNexusPalette.current
+    val grantedCount = remember { NexusEngine.getGrantedUids().size }
+    
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Column(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             RootLens()
             Spacer(Modifier.height(12.dp))
-            Text("0 apps granted · 0 modules active", color = p.dim, fontSize = 11.sp, fontFamily = MonoFont)
+            Text("$grantedCount apps granted · 0 modules active", color = p.dim, fontSize = 11.sp, fontFamily = MonoFont)
         }
         DeviceCard(onOpenAdvanced = onOpenAdvanced)
     }
@@ -89,24 +88,15 @@ fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
     val p = LocalNexusPalette.current
     var expanded by remember { mutableStateOf(false) }
 
-    // Static Device Info
     val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
     val model = Build.MODEL
     val deviceName = "$manufacturer $model"
     val buildDisplay = Build.DISPLAY
-    val androidVersion = Build.VERSION.RELEASE
-    val sdkLevel = Build.VERSION.SDK_INT
-    val securityPatch = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) Build.VERSION.SECURITY_PATCH else "Unknown"
-    val cpuAbi = Build.SUPPORTED_ABIS.joinToString(", ")
-    val hardware = Build.HARDWARE
-    val board = Build.BOARD
 
-    // Root Shell States
     var kernelVersion by remember { mutableStateOf("Loading...") }
     var selinuxStatus by remember { mutableStateOf("Loading...") }
     var isRootAvailable by remember { mutableStateOf(false) }
 
-    // Fetch root info when the card appears
     LaunchedEffect(Unit) {
         isRootAvailable = RootShell.isRootAvailable()
         if (isRootAvailable) {
@@ -118,10 +108,7 @@ fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
         }
     }
 
-    GlassCard(
-        modifier.fillMaxWidth()
-            .clickable(remember { MutableInteractionSource() }, indication = null) { expanded = !expanded }
-    ) {
+    GlassCard(modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, indication = null) { expanded = !expanded }) {
         Column(Modifier.padding(14.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -133,15 +120,10 @@ fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
             }
             AnimatedVisibility(expanded, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
                 Column(Modifier.padding(top = 12.dp)) {
-                    KeyValueRow("Android", "$androidVersion (SDK $sdkLevel)")
-                    KeyValueRow("Patch level", securityPatch)
+                    KeyValueRow("Android", "${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
                     KeyValueRow("Kernel", kernelVersion)
-                    KeyValueRow("Architecture", cpuAbi)
-                    KeyValueRow("Hardware", hardware)
-                    KeyValueRow("Board", board)
                     KeyValueRow("SUSFS", if (isRootAvailable) "Active" else "Unavailable")
                     KeyValueRow("SELinux", selinuxStatus)
-                    KeyValueRow("Verified boot", "Awaiting root shell...")
                     TextButton(onClick = onOpenAdvanced, contentPadding = PaddingValues(vertical = 8.dp)) {
                         Text("Advanced options →", color = p.accent, fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
                     }
@@ -168,19 +150,15 @@ fun SectionLabel(text: String) {
 
 // ---------- Superuser ----------
 data class GrantedApp(
-    val packageName: String,
-    val name: String,
-    val uid: Int, 
-    val icon: Drawable,
-    val isSystem: Boolean,
-    val excludeMod: Boolean,
-    val toggledOn: Boolean
+    val packageName: String, val name: String, val uid: Int, val icon: Drawable,
+    val isSystem: Boolean, val excludeMod: Boolean, val toggledOn: Boolean
 )
 
 @Composable
 fun SuperuserScreen() {
     val p = LocalNexusPalette.current
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     
     val apps = remember { mutableStateListOf<GrantedApp>() }
     var showSystem by remember { mutableStateOf(false) }
@@ -189,45 +167,30 @@ fun SuperuserScreen() {
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
+            val grantedUids = NexusEngine.getGrantedUids()
             val pm = context.packageManager
-            
             val flags = PackageManager.ApplicationInfoFlags.of(PackageManager.GET_META_DATA.toLong())
             val installed = pm.getInstalledApplications(flags)
-            val myPackageName = context.packageName
-
+            
             val appList = installed.mapNotNull { info ->
-                if (info.packageName == myPackageName) return@mapNotNull null
-
+                if (info.packageName == context.packageName) return@mapNotNull null
                 val name = pm.getApplicationLabel(info).toString()
-                if (name.isBlank() || name == info.packageName) return@mapNotNull null
-                
-                val isBaseSystemApp = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-                val isUpdatedSystemApp = (info.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
-                val isSystem = isBaseSystemApp || isUpdatedSystemApp
-                
-                val icon = pm.getApplicationIcon(info)
+                if (name.isBlank()) return@mapNotNull null
+                val isSystem = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
                 GrantedApp(
-                    packageName = info.packageName,
-                    name = name,
-                    uid = info.uid, 
-                    icon = icon,
-                    isSystem = isSystem,
-                    excludeMod = false,
-                    toggledOn = false
+                    packageName = info.packageName, name = name, uid = info.uid,
+                    icon = pm.getApplicationIcon(info), isSystem = isSystem,
+                    excludeMod = false, toggledOn = grantedUids.contains(info.uid)
                 )
             }.sortedBy { it.name.lowercase() }
             
             withContext(Dispatchers.Main) {
-                apps.clear()
-                apps.addAll(appList)
-                isLoading = false
+                apps.clear(); apps.addAll(appList); isLoading = false
             }
         }
     }
 
-    val filteredApps = apps.filter { 
-        it.isSystem == showSystem && it.name.contains(searchQuery, ignoreCase = true)
-    }
+    val filteredApps = apps.filter { it.isSystem == showSystem && it.name.contains(searchQuery, ignoreCase = true) }
 
     Column(Modifier.fillMaxSize()) {
         Text("Superuser", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
@@ -235,12 +198,9 @@ fun SuperuserScreen() {
         
         GlassCard(modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(16.dp)) {
             BasicTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                textStyle = TextStyle(color = p.ink, fontSize = 14.sp),
-                cursorBrush = SolidColor(p.accent),
-                modifier = Modifier.fillMaxSize(),
-                singleLine = true,
+                value = searchQuery, onValueChange = { searchQuery = it },
+                textStyle = TextStyle(color = p.ink, fontSize = 14.sp), cursorBrush = SolidColor(p.accent),
+                modifier = Modifier.fillMaxSize(), singleLine = true,
                 decorationBox = { innerTextField ->
                     Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.weight(1f)) {
@@ -251,30 +211,26 @@ fun SuperuserScreen() {
                 }
             )
         }
-        
         Spacer(Modifier.height(14.dp))
         GlassSegmented(listOf("User Apps", "System Apps"), if (showSystem) 1 else 0, onSelect = { showSystem = it == 1 })
         Spacer(Modifier.height(14.dp))
         
         GlassCard(modifier = Modifier.weight(1f).fillMaxWidth()) {
             if (isLoading) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Scanning installed apps...", color = p.dim, fontSize = 13.sp, fontFamily = MonoFont)
-                }
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Scanning installed apps...", color = p.dim, fontSize = 13.sp, fontFamily = MonoFont) }
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {
                     itemsIndexed(filteredApps, key = { _, app -> app.packageName }) { index, app ->
-                        AppRow(
-                            app = app,
-                            onToggleRoot = { checked -> 
-                                val idx = apps.indexOf(app)
-                                if (idx >= 0) apps[idx] = app.copy(toggledOn = checked)
-                            },
-                            onToggleExclude = { checked ->
-                                val idx = apps.indexOf(app)
-                                if (idx >= 0) apps[idx] = app.copy(excludeMod = checked)
+                        AppRow(app = app, onToggleRoot = { checked -> 
+                            val idx = apps.indexOf(app)
+                            if (idx >= 0) apps[idx] = app.copy(toggledOn = checked)
+                            scope.launch(Dispatchers.IO) {
+                                if (checked) NexusEngine.saveGrantedUid(app.uid) else NexusEngine.removeGrantedUid(app.uid)
                             }
-                        )
+                        }, onToggleExclude = { checked ->
+                            val idx = apps.indexOf(app)
+                            if (idx >= 0) apps[idx] = app.copy(excludeMod = checked)
+                        })
                         if (index < filteredApps.lastIndex) Divider(color = p.glassEdge, thickness = 0.5.dp)
                     }
                 }
@@ -287,41 +243,21 @@ fun SuperuserScreen() {
 fun AppRow(app: GrantedApp, onToggleRoot: (Boolean) -> Unit, onToggleExclude: (Boolean) -> Unit) {
     val p = LocalNexusPalette.current
     var expanded by remember { mutableStateOf(false) }
-
     Column(Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, indication = null) { expanded = !expanded }) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 13.dp), 
-            verticalAlignment = Alignment.CenterVertically, 
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             val imageBitmap = remember(app.icon) { app.icon.toImageBitmap() }
             Image(bitmap = imageBitmap, contentDescription = null, modifier = Modifier.size(38.dp).clip(RoundedCornerShape(8.dp)))
-            
             Column(Modifier.weight(1f)) {
                 Text(app.name, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(app.packageName, color = p.dim, fontSize = 9.sp, fontFamily = MonoFont, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("ROOT", color = if (app.toggledOn) p.accent else p.dim, fontSize = 9.sp, fontFamily = MonoFont, fontWeight = FontWeight.Bold)
-                GlassToggle(app.toggledOn, onCheckedChange = { checked ->
-                    if (checked) {
-                        if (NexusEngine.grantUidAccess(app.uid)) { 
-                             onToggleRoot(true) 
-                        }
-                    } else {
-                        onToggleRoot(false)
-                    }
-                })
+                GlassToggle(app.toggledOn, onCheckedChange = { onToggleRoot(it) })
             }
         }
-        
         AnimatedVisibility(expanded, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
-            Row(
-                Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.03f)).padding(horizontal = 16.dp, vertical = 12.dp), 
-                horizontalArrangement = Arrangement.SpaceBetween, 
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.03f)).padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column {
                     Text("Exclude Modifications", color = p.ink, fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
                     Text("Hide root and SUSFS from this app", color = p.dim, fontSize = 10.sp, fontFamily = MonoFont)
@@ -339,9 +275,7 @@ fun LogScreen() {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Logs", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         GlassCard {
-            Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                Text("No logs recorded yet", color = p.dim, fontSize = 13.sp, fontFamily = MonoFont)
-            }
+            Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { Text("No logs recorded yet", color = p.dim, fontSize = 13.sp, fontFamily = MonoFont) }
         }
     }
 }
@@ -354,35 +288,52 @@ fun ModuleScreen() {
     val p = LocalNexusPalette.current
     val context = LocalContext.current
     val modules = remember { mutableStateListOf<ModuleItem>() }
+    var isInstalling by remember { mutableStateOf(false) }
 
-    // File Picker Launcher for installing modules
-    val zipPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
+    // Load real modules on launch
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            val installed = NexusEngine.getInstalledModules()
+            withContext(Dispatchers.Main) {
+                modules.clear(); modules.addAll(installed)
+            }
+        }
+    }
+
+    val zipPickerLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri != null) {
-            // In a full implementation, you would pass this URI to your root shell 
-            // to copy and extract to /data/adb/nexussu/modules/
-            Toast.makeText(context, "Selected: ${uri.lastPathSegment}", Toast.LENGTH_SHORT).show()
+            isInstalling = true
+            val cacheFile = File(context.cacheDir, "module.zip")
+            context.contentResolver.openInputStream(uri)?.use { input -> cacheFile.outputStream().use { output -> input.copyTo(output) } }
+            
+            Thread {
+                val success = RootShell.installModule(cacheFile.absolutePath)
+                cacheFile.delete()
+                Handler(Looper.getMainLooper()).post {
+                    isInstalling = false
+                    if (success) {
+                        Toast.makeText(context, "Module installed!", Toast.LENGTH_SHORT).show()
+                        modules.clear(); modules.addAll(NexusEngine.getInstalledModules()) // Refresh list
+                    } else {
+                        Toast.makeText(context, "Installation failed.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }.start()
         }
     }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Modules", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-        
-        if (modules.isEmpty()) {
-            GlassCard {
-                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                    Text("No modules installed", color = p.dim, fontSize = 13.sp, fontFamily = MonoFont)
-                }
-            }
+        if (isInstalling) {
+            GlassCard { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { Text("Installing module...", color = p.accent, fontSize = 13.sp, fontFamily = MonoFont) } }
+        } else if (modules.isEmpty()) {
+            GlassCard { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { Text("No modules installed", color = p.dim, fontSize = 13.sp, fontFamily = MonoFont) } }
         } else {
             GlassCard {
                 Column {
                     modules.forEachIndexed { i, m ->
                         Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(Brush.linearGradient(listOf(p.accent, p.accent2))), contentAlignment = Alignment.Center) {
-                                Text(m.initial, color = Color(0xFF0A0E14), fontWeight = FontWeight.SemiBold)
-                            }
+                            Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(Brush.linearGradient(listOf(p.accent, p.accent2))), contentAlignment = Alignment.Center) { Text(m.initial, color = Color(0xFF0A0E14), fontWeight = FontWeight.SemiBold) }
                             Column(Modifier.weight(1f)) {
                                 Text(m.name, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
                                 Text(m.desc, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
@@ -394,16 +345,7 @@ fun ModuleScreen() {
                 }
             }
         }
-        
-        OutlinedButton(
-            onClick = { 
-                // Launch the file manager to pick a ZIP file
-                zipPickerLauncher.launch("application/zip")
-            },
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = p.dim),
-            shape = RoundedCornerShape(20.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("+ Install module") }
+        OutlinedButton(onClick = { zipPickerLauncher.launch("application/zip") }, enabled = !isInstalling, colors = ButtonDefaults.outlinedButtonColors(contentColor = p.dim), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) { Text(if (isInstalling) "Installing..." else "+ Install module") }
     }
 }
 
@@ -417,107 +359,60 @@ fun SettingsScreen(
     val p = LocalNexusPalette.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    
-    // Fetch Engine Version from JNI
     val engineVersion = remember { NexusEngine.getEngineVersion() }
+    var systemlessHosts by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        // Header
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(
-                Modifier.size(34.dp).clip(CircleShape).background(p.glassFill).border(1.dp, p.glassEdge, CircleShape)
-                    .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onBack),
-                contentAlignment = Alignment.Center
-            ) { BackIcon(tint = p.ink) }
+            Box(Modifier.size(34.dp).clip(CircleShape).background(p.glassFill).border(1.dp, p.glassEdge, CircleShape).clickable(remember { MutableInteractionSource() }, indication = null, onClick = onBack), contentAlignment = Alignment.Center) { BackIcon(tint = p.ink) }
             Text("Settings", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         }
 
-        // 1. Appearance
         SectionLabel("Appearance")
         GlassSegmented(listOf("Light", "Dark"), if (darkTheme) 1 else 0, onSelect = { onDarkThemeChange(it == 1) })
         GlassCard {
             Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 AccentTheme.entries.forEach { theme ->
-                    Box(
-                        Modifier.size(26.dp).clip(CircleShape).background(theme.accent)
-                            .border(2.dp, if (theme == accent) p.ink else Color.White.copy(alpha = 0.15f), CircleShape)
-                            .clickable(remember { MutableInteractionSource() }, indication = null) { onAccentChange(theme) }
-                    )
+                    Box(Modifier.size(26.dp).clip(CircleShape).background(theme.accent).border(2.dp, if (theme == accent) p.ink else Color.White.copy(alpha = 0.15f), CircleShape).clickable(remember { MutableInteractionSource() }, indication = null) { onAccentChange(theme) })
                 }
             }
         }
 
-        // 2. Stealth & Security
-        SectionLabel("Stealth & Security")
-        GlassCard {
-            Column {
-                BehaviorToggle("Hide NexusSU App", "Hide manager icon from launcher")
-                Divider(color = p.glassEdge, thickness = 0.5.dp)
-                BehaviorToggle("Hide from Play Protect", "Spoof package visibility to avoid detection")
-            }
-        }
-
-        // 3. Root Behavior
         SectionLabel("Root Behavior")
         GlassCard {
             Column {
-                BehaviorToggle("Time-boxed grants", "Auto-revoke root after 10 minutes")
-                Divider(color = p.glassEdge, thickness = 0.5.dp)
-                BehaviorToggle("Capability scoping", "Grant specific caps, not full root")
-                Divider(color = p.glassEdge, thickness = 0.5.dp)
-                BehaviorToggle("Systemless Hosts", "Redirect /system/etc/hosts for AdAway")
-                Divider(color = p.glassEdge, thickness = 0.5.dp)
-                BehaviorToggle("Zygisk Compatibility", "Enable Zygisk module injection")
-            }
-        }
-
-        // 4. Updates
-        SectionLabel("Updates")
-        GlassCard {
-            Column {
-                SettingsRow("Check for Updates", "Check for new NexusSU releases") {
-                    // Update check logic here
-                }
-                Divider(color = p.glassEdge, thickness = 0.5.dp)
-                SettingsRow("Update Channel", "Stable") {
-                    // Channel selector here
+                BehaviorToggle("Systemless Hosts", "Redirect /system/etc/hosts for AdAway", checked = systemlessHosts) { isChecked ->
+                    scope.launch(Dispatchers.IO) {
+                        val success = if (isChecked) NexusEngine.enableSystemlessHosts() else NexusEngine.disableSystemlessHosts()
+                        if (success) systemlessHosts = isChecked
+                    }
                 }
             }
         }
-
-        // 5. System Operations
+        
         SectionLabel("System Operations")
         GlassCard {
             Column {
-                SettingsRow("Reboot Device", "Standard system reboot") {
-                    scope.launch { RootShell.execute("setprop sys.powerctl reboot") }
-                }
+                SettingsRow("Reboot Device", "Standard system reboot") { scope.launch(Dispatchers.IO) { RootShell.execute("setprop sys.powerctl reboot") } }
                 Divider(color = p.glassEdge, thickness = 0.5.dp)
-                SettingsRow("Reboot to Recovery", "Restart into recovery mode") {
-                    scope.launch { RootShell.execute("setprop sys.powerctl reboot,recovery") }
-                }
+                SettingsRow("Reboot to Recovery", "Restart into recovery mode") { scope.launch(Dispatchers.IO) { RootShell.execute("setprop sys.powerctl reboot,recovery") } }
                 Divider(color = p.glassEdge, thickness = 0.5.dp)
-                SettingsRow("Reboot to Bootloader", "Restart into fastboot mode") {
-                    scope.launch { RootShell.execute("setprop sys.powerctl reboot,bootloader") }
-                }
+                SettingsRow("Reboot to Bootloader", "Restart into fastboot mode") { scope.launch(Dispatchers.IO) { RootShell.execute("setprop sys.powerctl reboot,bootloader") } }
             }
         }
-
-        // 6. Data Management
+ 
         SectionLabel("Data Management")
         GlassCard {
             Column {
-                SettingsRow("Clear Root Logs", "Delete all stored su request logs") {
-                    // Clear logs logic here
-                }
+                SettingsRow("Clear Root Logs", "Delete all stored su request logs") { scope.launch(Dispatchers.IO) { RootShell.execute("rm -f /data/adb/nexussu/logs.txt") } }
                 Divider(color = p.glassEdge, thickness = 0.5.dp)
                 SettingsRow("Reset Superuser List", "Revoke all granted root permissions") {
-                    // Clear database logic here
+                    scope.launch(Dispatchers.IO) { NexusEngine.clearAllRootGrants() }
+                    Toast.makeText(context, "All root permissions revoked", Toast.LENGTH_SHORT).show()
                 }
             }
         }
 
-        // 7. About
         SectionLabel("About")
         GlassCard {
             Column {
@@ -528,37 +423,30 @@ fun SettingsScreen(
                 KeyValueRow("GitHub", "NexusSU/manager")
             }
         }
-        
-        Spacer(Modifier.height(16.dp)) // Bottom padding for scroll
+        Spacer(Modifier.height(16.dp))
     }
 }
 
 @Composable
-fun BehaviorToggle(title: String, subtitle: String) {
+fun BehaviorToggle(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     val p = LocalNexusPalette.current
-    var checked by remember { mutableStateOf(false) } // Default to false
     Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
             Text(subtitle, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
         }
-        GlassToggle(checked, onCheckedChange = { checked = it })
+        GlassToggle(checked, onCheckedChange = { onCheckedChange(it) })
     }
 }
 
 @Composable
 fun SettingsRow(title: String, subtitle: String, onClick: () -> Unit) {
     val p = LocalNexusPalette.current
-    Row(
-        Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, indication = null) { onClick() }.padding(13.dp), 
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Row(Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, indication = null) { onClick() }.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
             Text(subtitle, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
         }
-        Box(Modifier.rotate(180f)) { 
-            BackIcon(tint = p.dim) // Reusing BackIcon but rotated 180deg to point right
-        }
+        Box(Modifier.rotate(180f)) { BackIcon(tint = p.dim) }
     }
 }
