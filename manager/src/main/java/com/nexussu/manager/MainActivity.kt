@@ -60,7 +60,7 @@ fun NexusSUApp(
     accent: AccentTheme, onAccentChange: (AccentTheme) -> Unit
 ) {
     val p = LocalNexusPalette.current
-    val hazeState = rememberHazeState()
+    val hazeState = remember { HazeState() }
     var tab by remember { mutableStateOf(Tab.Home) }
     var showSettings by remember { mutableStateOf(false) }
 
