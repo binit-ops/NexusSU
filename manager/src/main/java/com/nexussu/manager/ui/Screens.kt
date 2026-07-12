@@ -414,7 +414,14 @@ fun SettingsScreen(
     onBack: () -> Unit
 ) {
     val p = LocalNexusPalette.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    
+    // Fetch Engine Version from JNI
+    val engineVersion = remember { NexusEngine.getEngineVersion() }
+
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        // Header
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(
                 Modifier.size(34.dp).clip(CircleShape).background(p.glassFill).border(1.dp, p.glassEdge, CircleShape)
@@ -424,6 +431,7 @@ fun SettingsScreen(
             Text("Settings", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         }
 
+        // 1. Appearance
         SectionLabel("Appearance")
         GlassSegmented(listOf("Light", "Dark"), if (darkTheme) 1 else 0, onSelect = { onDarkThemeChange(it == 1) })
         GlassCard {
@@ -438,28 +446,118 @@ fun SettingsScreen(
             }
         }
 
-        SectionLabel("Behavior")
+        // 2. Stealth & Security
+        SectionLabel("Stealth & Security")
         GlassCard {
             Column {
-                BehaviorToggle("Time-boxed grants", "Auto-revoke after a set duration")
+                BehaviorToggle("Hide NexusSU App", "Hide manager icon from launcher")
+                Divider(color = p.glassEdge, thickness = 0.5.dp)
+                BehaviorToggle("Hide from Play Protect", "Spoof package visibility to avoid detection")
+            }
+        }
+
+        // 3. Root Behavior
+        SectionLabel("Root Behavior")
+        GlassCard {
+            Column {
+                BehaviorToggle("Time-boxed grants", "Auto-revoke root after 10 minutes")
                 Divider(color = p.glassEdge, thickness = 0.5.dp)
                 BehaviorToggle("Capability scoping", "Grant specific caps, not full root")
                 Divider(color = p.glassEdge, thickness = 0.5.dp)
-                BehaviorToggle("New-request alerts", "Notify on first-time su requests")
+                BehaviorToggle("Systemless Hosts", "Redirect /system/etc/hosts for AdAway")
+                Divider(color = p.glassEdge, thickness = 0.5.dp)
+                BehaviorToggle("Zygisk Compatibility", "Enable Zygisk module injection")
             }
         }
+
+        // 4. Updates
+        SectionLabel("Updates")
+        GlassCard {
+            Column {
+                SettingsRow("Check for Updates", "Check for new NexusSU releases") {
+                    // Update check logic here
+                }
+                Divider(color = p.glassEdge, thickness = 0.5.dp)
+                SettingsRow("Update Channel", "Stable") {
+                    // Channel selector here
+                }
+            }
+        }
+
+        // 5. System Operations
+        SectionLabel("System Operations")
+        GlassCard {
+            Column {
+                SettingsRow("Reboot Device", "Standard system reboot") {
+                    scope.launch { RootShell.execute("setprop sys.powerctl reboot") }
+                }
+                Divider(color = p.glassEdge, thickness = 0.5.dp)
+                SettingsRow("Reboot to Recovery", "Restart into recovery mode") {
+                    scope.launch { RootShell.execute("setprop sys.powerctl reboot,recovery") }
+                }
+                Divider(color = p.glassEdge, thickness = 0.5.dp)
+                SettingsRow("Reboot to Bootloader", "Restart into fastboot mode") {
+                    scope.launch { RootShell.execute("setprop sys.powerctl reboot,bootloader") }
+                }
+            }
+        }
+
+        // 6. Data Management
+        SectionLabel("Data Management")
+        GlassCard {
+            Column {
+                SettingsRow("Clear Root Logs", "Delete all stored su request logs") {
+                    // Clear logs logic here
+                }
+                Divider(color = p.glassEdge, thickness = 0.5.dp)
+                SettingsRow("Reset Superuser List", "Revoke all granted root permissions") {
+                    // Clear database logic here
+                }
+            }
+        }
+
+        // 7. About
+        SectionLabel("About")
+        GlassCard {
+            Column {
+                KeyValueRow("Manager Version", "1.0.0")
+                Divider(color = p.glassEdge, thickness = 0.5.dp)
+                KeyValueRow("Engine Version", if (engineVersion == 100) "v100 (Active)" else "Not Found")
+                Divider(color = p.glassEdge, thickness = 0.5.dp)
+                KeyValueRow("GitHub", "NexusSU/manager")
+            }
+        }
+        
+        Spacer(Modifier.height(16.dp)) // Bottom padding for scroll
     }
 }
 
 @Composable
 fun BehaviorToggle(title: String, subtitle: String) {
     val p = LocalNexusPalette.current
-    var checked by remember { mutableStateOf(true) }
+    var checked by remember { mutableStateOf(false) } // Default to false
     Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
             Text(subtitle, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
         }
         GlassToggle(checked, onCheckedChange = { checked = it })
+    }
+}
+
+@Composable
+fun SettingsRow(title: String, subtitle: String, onClick: () -> Unit) {
+    val p = LocalNexusPalette.current
+    Row(
+        Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, indication = null) { onClick() }.padding(13.dp), 
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
+            Text(subtitle, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
+        }
+        Box(Modifier.rotate(180f)) { 
+            BackIcon(tint = p.dim) // Reusing BackIcon but rotated 180deg to point right
+        }
     }
 }
