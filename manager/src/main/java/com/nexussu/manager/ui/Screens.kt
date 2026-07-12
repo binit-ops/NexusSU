@@ -445,4 +445,9 @@ fun BehaviorToggle(title: String, subtitle: String) {
     var checked by remember { mutableStateOf(true) }
     Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title, 
+            Text(title, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
+            Text(subtitle, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
+        }
+        GlassToggle(checked, onCheckedChange = { checked = it })
+    }
+} 
