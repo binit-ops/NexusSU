@@ -5,6 +5,15 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+// ADDED: Force Kotlin 2.0.21 stdlib to prevent Haze from pulling Kotlin 2.2
+configurations.all {
+    resolutionStrategy {
+        force("org.jetbrains.kotlin:kotlin-stdlib:2.0.21")
+        force("org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.0.21")
+        force("org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.0.21")
+    }
+}
+
 android {
     namespace = "com.nexussu.manager"
     compileSdk = 36
@@ -79,8 +88,9 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
 
-    implementation("dev.chrisbanes.haze:haze:1.7.2")
-    implementation("dev.chrisbanes.haze:haze-materials:1.7.2")
+    // CHANGED: Downgraded haze to 1.0.0 for Kotlin 2.0 compatibility
+    implementation("dev.chrisbanes.haze:haze:1.0.0")
+    implementation("dev.chrisbanes.haze:haze-materials:1.0.0")
 
     val room_version = "2.6.1"
     implementation("androidx.room:room-runtime:$room_version")
