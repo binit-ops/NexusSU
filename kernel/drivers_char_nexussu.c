@@ -7,6 +7,7 @@
 #define NEXUSSU_IOC_MAGIC 'N'
 #define NEXUSSU_ALLOW_UID _IOW(NEXUSSU_IOC_MAGIC, 1, uid_t)
 #define NEXUSSU_GET_VERSION _IOR(NEXUSSU_IOC_MAGIC, 2, int)
+#define NEXUSSU_ESCALATE_SELF _IO(NEXUSSU_IOC_MAGIC, 3) // Allows Manager to escalate itself
 
 const int ENGINE_VERSION = 100;
 
@@ -17,7 +18,6 @@ static long nexussu_ioctl(struct file *file, unsigned int cmd, unsigned long arg
     
     switch (cmd) {
         case NEXUSSU_ALLOW_UID:
-            /* Copy the UID sent by the Manager App from user space */
             if (copy_from_user(&target_uid, (uid_t __user *)arg, sizeof(uid_t))) {
                 return -EFAULT;
             }
@@ -26,10 +26,19 @@ static long nexussu_ioctl(struct file *file, unsigned int cmd, unsigned long arg
             break;
             
         case NEXUSSU_GET_VERSION:
-            /* Return the kernel engine version to the Manager App */
             if (copy_to_user((int __user *)arg, &ENGINE_VERSION, sizeof(int))) {
                 return -EFAULT;
             }
+            break;
+
+        case NEXUSSU_ESCALATE_SELF:
+            /* 
+             * REAL ROOT: The Manager App calls this to escalate itself to UID 0.
+             * This breaks the Catch-22: The manager needs root to mount the 'su' binary,
+             * but needs the 'su' binary to get root.
+             */
+            nexussu_escalate();
+            printk(KERN_INFO "NexusSU: Manager App escalated self to root.\n");
             break;
             
         default:
@@ -38,23 +47,20 @@ static long nexussu_ioctl(struct file *file, unsigned int cmd, unsigned long arg
     return 0;
 }
 
-/* Bind our custom ioctl gateway into standard file operations */
 static const struct file_operations nexussu_fops = {
     .owner = THIS_MODULE,
     .unlocked_ioctl = nexussu_ioctl,
     .compat_ioctl = nexussu_ioctl,
 };
 
-/* Define the misc device so /dev/nexussu is automatically created */
 static struct miscdevice nexussu_dev = {
     .minor = MISC_DYNAMIC_MINOR,
-    .name = "nexussu",           /* Creates /dev/nexussu */
+    .name = "nexussu",
     .fops = &nexussu_fops,
-    .mode = 0666,                /* Allow Manager App to read/write */
+    .mode = 0666,
 };
 
 static int __init nexussu_init(void) {
-    /* Register the character device */
     int ret = misc_register(&nexussu_dev);
     if (ret) {
         printk(KERN_ERR "NexusSU: Failed to register misc device\n");
