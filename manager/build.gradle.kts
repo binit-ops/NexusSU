@@ -5,15 +5,6 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
-// ADDED: Force Kotlin 2.0.21 stdlib to prevent Haze from pulling Kotlin 2.2
-configurations.all {
-    resolutionStrategy {
-        force("org.jetbrains.kotlin:kotlin-stdlib:2.0.21")
-        force("org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.0.21")
-        force("org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.0.21")
-    }
-}
-
 android {
     namespace = "com.nexussu.manager"
     compileSdk = 36
@@ -78,25 +69,29 @@ android {
 }
 
 dependencies {
+    // Core Android & Lifecycle
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.2")
     implementation("androidx.activity:activity-compose:1.9.0")
     
+    // Jetpack Compose
     implementation(platform("androidx.compose:compose-bom:2024.06.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
 
-    // CHANGED: Downgraded haze to 1.0.0 for Kotlin 2.0 compatibility
-    implementation("dev.chrisbanes.haze:haze:1.0.0")
-    implementation("dev.chrisbanes.haze:haze-materials:1.0.0")
+    // Haze (Glassmorphism effects)
+    implementation("dev.chrisbanes.haze:haze:1.2.0")
+    implementation("dev.chrisbanes.haze:haze-materials:1.2.0")
 
+    // Room Database
     val room_version = "2.6.1"
     implementation("androidx.room:room-runtime:$room_version")
     implementation("androidx.room:room-ktx:$room_version")
     ksp("androidx.room:room-compiler:$room_version")
 
+    // Testing
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
