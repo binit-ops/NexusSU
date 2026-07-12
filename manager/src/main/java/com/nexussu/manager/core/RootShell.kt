@@ -4,10 +4,6 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 
 object RootShell {
-    /**
-     * Executes a command as root and returns the output string.
-     * Works because the kernel hook intercepts 'su' and grants us UID 0.
-     */
     fun execute(command: String): String {
         return try {
             val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
@@ -20,9 +16,9 @@ object RootShell {
         }
     }
 
-    fun isRootAvailable(): Boolean {
+    fun executeBoolean(command: String): Boolean {
         return try {
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
             process.waitFor()
             process.exitValue() == 0
         } catch (e: Exception) {
@@ -30,12 +26,26 @@ object RootShell {
         }
     }
 
-    fun getKernelVersion(): String {
-        return execute("uname -r")
-    }
-
-    fun getSelinuxStatus(): String {
-        val status = execute("getenforce")
-        return if (status.equals("Enforcing", ignoreCase = true)) "Enforcing" else "Permissive"
+    fun isRootAvailable(): Boolean = executeBoolean("id")
+    fun getKernelVersion(): String = execute("uname -r")
+    fun getSelinuxStatus(): String = execute("getenforce")
+    
+    // REAL MODULE INSTALLATION
+    fun installModule(zipPath: String): Boolean {
+        val cmd = """
+            mkdir -p /data/adb/nexussu/modules_temp
+            unzip -o $zipPath -d /data/adb/nexussu/modules_temp
+            if [ -f /data/adb/nexussu/modules_temp/module.prop ]; then
+                ID=$(grep '^id=' /data/adb/nexussu/modules_temp/module.prop | cut -d= -f2)
+                mkdir -p /data/adb/nexussu/modules/$ID
+                cp -r /data/adb/nexussu/modules_temp/* /data/adb/nexussu/modules/$ID/
+                rm -rf /data/adb/nexussu/modules_temp
+                echo "SUCCESS"
+            else
+                rm -rf /data/adb/nexussu/modules_temp
+                echo "FAILED"
+            fi
+        """.trimIndent()
+        return execute(cmd).contains("SUCCESS")
     }
 }
