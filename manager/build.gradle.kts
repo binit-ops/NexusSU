@@ -100,3 +100,36 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
+
+// --- AUTO-COMPILE SU BINARY ---
+tasks.register<Exec>("compileSuBinary") {
+    val ndkDir = android.ndkDirectory.absolutePath
+    val osName = System.getProperty("os.name").toLowerCase()
+    val hostTag = when {
+        osName.contains("windows") -> "windows-x86_64"
+        osName.contains("mac") -> "darwin-x86_64"
+        else -> "linux-x86_64"
+    }
+    
+    val clang = file("$ndkDir/toolchains/llvm/prebuilt/$hostTag/bin/aarch64-linux-android24-clang").absolutePath
+    val sourceFile = file("native/su.c")
+    val outputDir = file("src/main/assets")
+    val outputFile = file("$outputDir/su.bin")
+
+    outputs.file(outputFile)
+    inputs.file(sourceFile)
+
+    doFirst {
+        outputDir.mkdirs()
+        if (!sourceFile.exists()) {
+            throw GradleException("Missing native/su.c file! Please create it.")
+        }
+    }
+
+    commandLine(clang, sourceFile.absolutePath, "-o", outputFile.absolutePath, "-static")
+}
+
+// Make sure the binary is compiled before the app is packaged
+tasks.named("preBuild").configure {
+    dependsOn("compileSuBinary")
+}
