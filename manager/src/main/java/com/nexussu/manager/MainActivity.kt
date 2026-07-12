@@ -20,15 +20,19 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nexussu.manager.core.NexusEngine
 import com.nexussu.manager.ui.*
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,6 +67,27 @@ fun NexusSUApp(
     val hazeState = remember { HazeState() }
     var tab by remember { mutableStateOf(Tab.Home) }
     var showSettings by remember { mutableStateOf(false) }
+    
+    // AUTOMATION: Check if this is the first time the app is opened
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("nexussu_prefs", 0) }
+    var isSetupComplete by remember { mutableStateOf(prefs.getBoolean("is_su_installed", false)) }
+
+    // If not setup, automatically install the su binary in the background
+    LaunchedEffect(isSetupComplete) {
+        if (!isSetupComplete) {
+            withContext(Dispatchers.IO) {
+                // Automatically escalate and mount the su binary
+                NexusEngine.installSuBinary(context)
+                
+                // Save to prefs so we don't do this every time the app opens
+                prefs.edit().putBoolean("is_su_installed", true).apply()
+                
+                // Tell the UI we are ready
+                isSetupComplete = true
+            }
+        }
+    }
 
     CompositionLocalProvider(LocalHazeState provides hazeState) {
         Box(Modifier.fillMaxSize()) {
@@ -72,7 +97,6 @@ fun NexusSUApp(
                     .hazeSource(state = hazeState)
             ) { LiquidBlobs() }
 
-            // FIX: Added systemBarsPadding() to prevent UI from hiding behind the camera/nav pill
             Column(Modifier.fillMaxSize().systemBarsPadding().padding(16.dp)) {
                 Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text(buildAnnotatedString {
@@ -87,24 +111,31 @@ fun NexusSUApp(
                 }
 
                 Box(Modifier.weight(1f)) {
-                    AnimatedContent(
-                        targetState = if (showSettings) "settings" else tab.name,
-                        transitionSpec = {
-                            (fadeIn() + slideInVertically { it / 8 }) togetherWith (fadeOut() + slideOutVertically { -it / 8 })
-                        },
-                        label = "screen"
-                    ) { state ->
-                        when (state) {
-                            "settings" -> SettingsScreen(darkTheme, onDarkThemeChange, accent, onAccentChange) { showSettings = false }
-                            "Home" -> HomeScreen(onOpenAdvanced = { showSettings = true })
-                            "Log" -> LogScreen()
-                            "Superuser" -> SuperuserScreen()
-                            else -> ModuleScreen()
+                    // Show a loading screen while setting up, otherwise show the normal app
+                    if (!isSetupComplete) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("Initializing Root Environment...", color = p.accent, fontFamily = MonoFont, fontSize = 14.sp)
+                        }
+                    } else {
+                        AnimatedContent(
+                            targetState = if (showSettings) "settings" else tab.name,
+                            transitionSpec = {
+                                (fadeIn() + slideInVertically { it / 8 }) togetherWith (fadeOut() + slideOutVertically { -it / 8 })
+                            },
+                            label = "screen"
+                        ) { state ->
+                            when (state) {
+                                "settings" -> SettingsScreen(darkTheme, onDarkThemeChange, accent, onAccentChange) { showSettings = false }
+                                "Home" -> HomeScreen(onOpenAdvanced = { showSettings = true })
+                                "Log" -> LogScreen()
+                                "Superuser" -> SuperuserScreen()
+                                else -> ModuleScreen()
+                            }
                         }
                     }
                 }
 
-                if (!showSettings) {
+                if (!showSettings && isSetupComplete) {
                     Spacer(Modifier.height(12.dp))
                     LiquidTabBar(selected = tab, onSelect = { tab = it })
                 }
@@ -120,7 +151,6 @@ fun LiquidBlobs() {
     val d by infinite.animateFloat(0f, 1f, infiniteRepeatable(tween(17000, easing = LinearEasing), RepeatMode.Reverse), label = "d")
     
     Box(Modifier.fillMaxSize()) {
-        // FIX: Moved translations to graphicsLayer to prevent continuous layout recomposition
         Box(
             Modifier
                 .graphicsLayer {
