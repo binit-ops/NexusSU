@@ -6,14 +6,14 @@ plugins {
 
 android {
     namespace = "com.nexussu.manager"
-    compileSdk = 34
+    compileSdk = 35
     
     ndkVersion = "25.1.8937393"
 
     defaultConfig {
         applicationId = "com.nexussu.manager"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
 
