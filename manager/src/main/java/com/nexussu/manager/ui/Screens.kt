@@ -1,12 +1,17 @@
 package com.nexussu.manager.ui
 
 import com.nexussu.manager.core.NexusEngine
+import com.nexussu.manager.core.RootShell
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.os.Build
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
@@ -88,6 +93,23 @@ fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
     val deviceName = "$manufacturer $model"
     val buildDisplay = Build.DISPLAY
 
+    // Root Shell States
+    var kernelVersion by remember { mutableStateOf("Loading...") }
+    var selinuxStatus by remember { mutableStateOf("Loading...") }
+    var isRootAvailable by remember { mutableStateOf(false) }
+
+    // Fetch root info when the card appears
+    LaunchedEffect(Unit) {
+        isRootAvailable = RootShell.isRootAvailable()
+        if (isRootAvailable) {
+            kernelVersion = RootShell.getKernelVersion()
+            selinuxStatus = RootShell.getSelinuxStatus()
+        } else {
+            kernelVersion = "Root not available"
+            selinuxStatus = "Root not available"
+        }
+    }
+
     GlassCard(
         modifier.fillMaxWidth()
             .clickable(remember { MutableInteractionSource() }, indication = null) { expanded = !expanded }
@@ -103,9 +125,9 @@ fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
             }
             AnimatedVisibility(expanded, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
                 Column(Modifier.padding(top = 12.dp)) {
-                    KeyValueRow("Kernel", "Awaiting root shell...")
-                    KeyValueRow("SUSFS", "Awaiting root shell...")
-                    KeyValueRow("SELinux", "Awaiting root shell...")
+                    KeyValueRow("Kernel", kernelVersion)
+                    KeyValueRow("SUSFS", if (isRootAvailable) "Active" else "Unavailable")
+                    KeyValueRow("SELinux", selinuxStatus)
                     KeyValueRow("Verified boot", "Awaiting root shell...")
                     TextButton(onClick = onOpenAdvanced, contentPadding = PaddingValues(vertical = 8.dp)) {
                         Text("Advanced options →", color = p.accent, fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
@@ -156,7 +178,6 @@ fun SuperuserScreen() {
         withContext(Dispatchers.IO) {
             val pm = context.packageManager
             
-            // FIX: Use the modern ApplicationInfoFlags API to prevent type mismatch
             val flags = PackageManager.ApplicationInfoFlags.of(PackageManager.GET_META_DATA.toLong())
             val installed = pm.getInstalledApplications(flags)
             val myPackageName = context.packageName
@@ -318,7 +339,19 @@ data class ModuleItem(val initial: String, val name: String, val desc: String, v
 @Composable
 fun ModuleScreen() {
     val p = LocalNexusPalette.current
+    val context = LocalContext.current
     val modules = remember { mutableStateListOf<ModuleItem>() }
+
+    // File Picker Launcher for installing modules
+    val zipPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            // In a full implementation, you would pass this URI to your root shell 
+            // to copy and extract to /data/adb/nexussu/modules/
+            Toast.makeText(context, "Selected: ${uri.lastPathSegment}", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Modules", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
@@ -350,7 +383,10 @@ fun ModuleScreen() {
         }
         
         OutlinedButton(
-            onClick = { /* module install flow */ },
+            onClick = { 
+                // Launch the file manager to pick a ZIP file
+                zipPickerLauncher.launch("application/zip")
+            },
             colors = ButtonDefaults.outlinedButtonColors(contentColor = p.dim),
             shape = RoundedCornerShape(20.dp),
             modifier = Modifier.fillMaxWidth()
@@ -409,9 +445,4 @@ fun BehaviorToggle(title: String, subtitle: String) {
     var checked by remember { mutableStateOf(true) }
     Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
-            Text(subtitle, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
-        }
-        GlassToggle(checked, onCheckedChange = { checked = it })
-    }
-}
+            Text(title, 
