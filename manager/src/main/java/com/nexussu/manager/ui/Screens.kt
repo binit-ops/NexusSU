@@ -88,10 +88,17 @@ fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
     val p = LocalNexusPalette.current
     var expanded by remember { mutableStateOf(false) }
 
+    // Static Device Info
     val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
     val model = Build.MODEL
     val deviceName = "$manufacturer $model"
     val buildDisplay = Build.DISPLAY
+    val androidVersion = Build.VERSION.RELEASE
+    val sdkLevel = Build.VERSION.SDK_INT
+    val securityPatch = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) Build.VERSION.SECURITY_PATCH else "Unknown"
+    val cpuAbi = Build.SUPPORTED_ABIS.joinToString(", ")
+    val hardware = Build.HARDWARE
+    val board = Build.BOARD
 
     // Root Shell States
     var kernelVersion by remember { mutableStateOf("Loading...") }
@@ -125,7 +132,12 @@ fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
             }
             AnimatedVisibility(expanded, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
                 Column(Modifier.padding(top = 12.dp)) {
+                    KeyValueRow("Android", "$androidVersion (SDK $sdkLevel)")
+                    KeyValueRow("Patch level", securityPatch)
                     KeyValueRow("Kernel", kernelVersion)
+                    KeyValueRow("Architecture", cpuAbi)
+                    KeyValueRow("Hardware", hardware)
+                    KeyValueRow("Board", board)
                     KeyValueRow("SUSFS", if (isRootAvailable) "Active" else "Unavailable")
                     KeyValueRow("SELinux", selinuxStatus)
                     KeyValueRow("Verified boot", "Awaiting root shell...")
@@ -143,7 +155,7 @@ fun KeyValueRow(key: String, value: String) {
     val p = LocalNexusPalette.current
     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(key, color = p.dim, fontSize = 12.sp)
-        Text(value, color = p.ink, fontSize = 12.sp, fontFamily = MonoFont)
+        Text(value, color = p.ink, fontSize = 12.sp, fontFamily = MonoFont, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -450,4 +462,4 @@ fun BehaviorToggle(title: String, subtitle: String) {
         }
         GlassToggle(checked, onCheckedChange = { checked = it })
     }
-} 
+}
