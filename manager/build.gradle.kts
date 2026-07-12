@@ -46,10 +46,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     buildFeatures {
         compose = true
     }
@@ -65,6 +61,13 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+}
+
+// FIX: Replaced deprecated kotlinOptions with the Kotlin 2.0 compilerOptions block
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
@@ -104,7 +107,8 @@ dependencies {
 // --- AUTO-COMPILE SU BINARY ---
 tasks.register<Exec>("compileSuBinary") {
     val ndkDir = android.ndkDirectory.absolutePath
-    val osName = System.getProperty("os.name").toLowerCase()
+    // FIX: Replaced deprecated toLowerCase() with lowercase()
+    val osName = System.getProperty("os.name").lowercase()
     val hostTag = when {
         osName.contains("windows") -> "windows-x86_64"
         osName.contains("mac") -> "darwin-x86_64"
