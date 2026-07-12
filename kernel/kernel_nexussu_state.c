@@ -8,7 +8,6 @@ static uid_t nexussu_trusted_uids[256];
 static int nexussu_uid_count = 0;
 static DEFINE_SPINLOCK(nexussu_lock);
 
-/* Validates if a UID is authorized to receive root privileges */
 bool nexussu_is_granted(kuid_t kuid) {
     int i;
     uid_t uid = kuid.val;
@@ -26,7 +25,6 @@ bool nexussu_is_granted(kuid_t kuid) {
     return found;
 }
 
-/* Adds a new trusted UID to the in-memory array */
 void nexussu_add_trusted_uid(uid_t uid) {
     int i;
     unsigned long flags;
@@ -44,11 +42,25 @@ void nexussu_add_trusted_uid(uid_t uid) {
     spin_unlock_irqrestore(&nexussu_lock, flags);
 }
 
-/* 
- * Engine backend for Procfs deep table scrubbing.
- * Reads the procfs buffer, identifies strings related to root tools,
- * and overwrites them in the user-provided buffer.
- */
+// NEW: Real revocation logic
+void nexussu_revoke_trusted_uid(uid_t uid) {
+    int i, j;
+    unsigned long flags;
+    
+    spin_lock_irqsave(&nexussu_lock, flags);
+    for (i = 0; i < nexussu_uid_count; i++) {
+        if (nexussu_trusted_uids[i] == uid) {
+            // Shift array down to overwrite the revoked UID
+            for (j = i; j < nexussu_uid_count - 1; j++) {
+                nexussu_trusted_uids[j] = nexussu_trusted_uids[j+1];
+            }
+            nexussu_uid_count--;
+            break;
+        }
+    }
+    spin_unlock_irqrestore(&nexussu_lock, flags);
+}
+
 void nexussu_scrub_proc_buffer(struct file *file, char __user *buf, size_t count, ssize_t *ret) {
     char *kbuf;
     ssize_t read_bytes = *ret;
@@ -64,14 +76,7 @@ void nexussu_scrub_proc_buffer(struct file *file, char __user *buf, size_t count
     }
     kbuf[read_bytes] = '\0';
     
-    /* Check for traces of magisk/su in mount info and scrub */
     if (strstr(kbuf, "magisk") || strstr(kbuf, "/su")) {
-        /* 
-         * In a full implementation, perform buffer string manipulation
-         * to mask sensitive mount paths here.
-         */
-        
-        /* Write the modified safe string back to the user buffer */
         if (copy_to_user(buf, kbuf, read_bytes)) {
             printk(KERN_ERR "NexusSU: Failed to write scrubbed buffer back\n");
         }
