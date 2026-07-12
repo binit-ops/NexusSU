@@ -1,13 +1,12 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose") 
-    id("com.google.devtools.ksp") // ADDED: Required for Room Database
+    id("com.google.devtools.ksp") // Room Database
 }
 
 android {
     namespace = "com.nexussu.manager"
-    compileSdk = 34 // CORRECTED: Changed from 36 to 34 for CI stability
+    compileSdk = 34
     
     ndkVersion = "25.1.8937393"
 
@@ -54,6 +53,11 @@ android {
         compose = true
     }
 
+    // ADDED: This replaces the Compose Plugin for Kotlin 1.9.24
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.14"
+    }
+
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
@@ -83,11 +87,11 @@ dependencies {
     implementation("dev.chrisbanes.haze:haze:1.7.2")
     implementation("dev.chrisbanes.haze:haze-materials:1.7.2")
 
-    // ADDED: Room Database
+    // Room Database
     val room_version = "2.6.1"
     implementation("androidx.room:room-runtime:$room_version")
     implementation("androidx.room:room-ktx:$room_version")
-    ksp("androidx.room:room-compiler:$room_version") // Uses KSP to generate Room code
+    ksp("androidx.room:room-compiler:$room_version")
 
     // Testing
     testImplementation("junit:junit:4.13.2")
