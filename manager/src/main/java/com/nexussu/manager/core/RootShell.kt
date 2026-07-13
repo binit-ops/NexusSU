@@ -51,7 +51,6 @@ object RootShell {
         return execute(cmd).contains("SUCCESS")
     }
 
-    // NEW: Real-time Module Enable/Disable Logic
     fun setModuleEnabled(id: String, enabled: Boolean): Boolean {
         val basePath = "/data/adb/nexussu/modules/$id"
         val cmd = if (enabled) {
@@ -78,6 +77,22 @@ object RootShell {
             echo "SUCCESS"
             """.trimIndent()
         }
+        return execute(cmd).contains("SUCCESS")
+    }
+
+    // NEW: Delete Module Logic
+    fun deleteModule(id: String): Boolean {
+        val basePath = "/data/adb/nexussu/modules/$id"
+        val cmd = """
+            if [ -d $basePath/system ]; then
+                find $basePath/system -type f | while read file; do
+                    target_path="/system\${file#$basePath/system}"
+                    umount \$target_path 2>/dev/null
+                done
+            fi
+            rm -rf $basePath
+            echo "SUCCESS"
+        """.trimIndent()
         return execute(cmd).contains("SUCCESS")
     }
 }
