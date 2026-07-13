@@ -30,7 +30,6 @@ object RootShell {
     fun getKernelVersion(): String = execute("uname -r")
     fun getSelinuxStatus(): String = execute("getenforce")
     
-    // REAL MODULE INSTALLATION
     fun installModule(zipPath: String): Boolean {
         val cmd = """
             mkdir -p /data/adb/nexussu/modules_temp
@@ -40,6 +39,14 @@ object RootShell {
                 mkdir -p /data/adb/nexussu/modules/$ID
                 cp -r /data/adb/nexussu/modules_temp/* /data/adb/nexussu/modules/$ID/
                 rm -rf /data/adb/nexussu/modules_temp
+                
+                if [ -d /data/adb/nexussu/modules/$ID/system ]; then
+                    find /data/adb/nexussu/modules/$ID/system -type f | while read file; do
+                        target_path="/system${file#/data/adb/nexussu/modules/$ID/system}"
+                        mkdir -p $(dirname $target_path)
+                        mount --bind $file $target_path
+                    done
+                fi
                 echo "SUCCESS"
             else
                 rm -rf /data/adb/nexussu/modules_temp
