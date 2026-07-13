@@ -281,12 +281,14 @@ fun LogScreen() {
 }
 
 // ---------- Module ----------
-data class ModuleItem(val initial: String, val name: String, val desc: String, val enabled: Boolean)
+// UPDATED: Added 'id' field
+data class ModuleItem(val id: String, val initial: String, val name: String, val desc: String, val enabled: Boolean)
 
 @Composable
 fun ModuleScreen() {
     val p = LocalNexusPalette.current
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val modules = remember { mutableStateListOf<ModuleItem>() }
     var isInstalling by remember { mutableStateOf(false) }
 
@@ -337,7 +339,13 @@ fun ModuleScreen() {
                                 Text(m.name, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
                                 Text(m.desc, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
                             }
-                            GlassToggle(m.enabled, onCheckedChange = { checked -> modules[i] = m.copy(enabled = checked) })
+                            // UPDATED: Wired to real mount/unmount logic
+                            GlassToggle(m.enabled, onCheckedChange = { checked ->
+                                modules[i] = m.copy(enabled = checked) // Update UI immediately
+                                scope.launch(Dispatchers.IO) {
+                                    NexusEngine.setModuleEnabled(m.id, checked) // Mount/Unmount in background
+                                }
+                            })
                         }
                         if (i < modules.lastIndex) Divider(color = p.glassEdge, thickness = 0.5.dp)
                     }
@@ -347,7 +355,7 @@ fun ModuleScreen() {
         OutlinedButton(onClick = { zipPickerLauncher.launch("application/zip") }, enabled = !isInstalling, colors = ButtonDefaults.outlinedButtonColors(contentColor = p.dim), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) { Text(if (isInstalling) "Installing..." else "+ Install module") }
     }
 }
-
+                    
 // ---------- Settings ----------
 @Composable
 fun SettingsScreen(
