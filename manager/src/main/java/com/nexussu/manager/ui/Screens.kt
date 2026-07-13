@@ -395,7 +395,7 @@ fun ModuleScreen() {
             }
         }
 
-        // ---------- Settings ----------
+  // ---------- Settings ----------
 @Composable
 fun SettingsScreen(
     darkTheme: Boolean, onDarkThemeChange: (Boolean) -> Unit,
@@ -409,7 +409,9 @@ fun SettingsScreen(
     var systemlessHosts by remember { mutableStateOf(false) }
     var safeMode by remember { mutableStateOf(RootShell.execute("[ -f /data/adb/nexussu/safemode ] && echo 1 || echo 0").trim() == "1") }
     
-    // Update states
+    // NEW: ADB Root State
+    var adbRoot by remember { mutableStateOf(NexusEngine.isAdbRootEnabled()) }
+    
     var isCheckingUpdates by remember { mutableStateOf(false) }
     var updateUrl by remember { mutableStateOf<String?>(null) }
 
@@ -429,9 +431,29 @@ fun SettingsScreen(
             }
         }
 
+        SectionLabel("Stealth & Security")
+        GlassCard {
+            Column {
+                SettingsRow("Hide NexusSU App", "Remove icon from launcher. Dial *#*#63987378#*#* to restore.") {
+                    val pm = context.packageManager
+                    val componentName = android.content.ComponentName(context, "com.nexussu.manager.MainActivity")
+                    pm.setComponentEnabledSetting(componentName, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+                    Toast.makeText(context, "App hidden. Use dialer code to restore.", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+
         SectionLabel("Root Behavior")
         GlassCard {
             Column {
+                // NEW: ADB Root Toggle
+                BehaviorToggle("Allow ADB Root", "Grant root permissions to ADB Shell (UID 2000)", checked = adbRoot) { isChecked ->
+                    scope.launch(Dispatchers.IO) {
+                        val success = NexusEngine.setAdbRootEnabled(isChecked)
+                        if (success) adbRoot = isChecked
+                    }
+                }
+                Divider(color = p.glassEdge, thickness = 0.5.dp)
                 BehaviorToggle("Systemless Hosts", "Redirect /system/etc/hosts for AdAway", checked = systemlessHosts) { isChecked ->
                     scope.launch(Dispatchers.IO) {
                         val success = if (isChecked) NexusEngine.enableSystemlessHosts() else NexusEngine.disableSystemlessHosts()
@@ -439,7 +461,6 @@ fun SettingsScreen(
                     }
                 }
                 Divider(color = p.glassEdge, thickness = 0.5.dp)
-                // NEW: Safe Mode Toggle
                 BehaviorToggle("Safe Mode", "Disable all modules on next boot", checked = safeMode) { isChecked ->
                     scope.launch(Dispatchers.IO) {
                         if (isChecked) RootShell.execute("touch /data/adb/nexussu/safemode")
@@ -499,7 +520,6 @@ fun SettingsScreen(
                     Toast.makeText(context, "All root permissions revoked", Toast.LENGTH_SHORT).show()
                 }
                 Divider(color = p.glassEdge, thickness = 0.5.dp)
-                // NEW: Real Uninstall Routine
                 SettingsRow("Uninstall NexusSU", "Remove all binaries, modules, and data") {
                     scope.launch(Dispatchers.IO) {
                         RootShell.execute("umount /system/bin/su")
