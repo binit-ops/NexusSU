@@ -3,47 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NexusSU | Kernel-Level Root</title>
+    <title>NexusSU | Professional Kernel Root</title>
     <link rel="stylesheet" href="style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
 </head>
 <body>
     <nav>
         <a href="index.html" class="active">Home</a>
-        <a href="hooks.html">Kernel Hooks</a>
+        <a href="hooks.html">Kernel Integration</a>
         <a href="compile.html">Compilation</a>
     </nav>
 
     <div class="content hero">
         <h1>NexusSU</h1>
-        <p>Advanced, kernel-level root solution for Android. Built for performance, stability, and total stealth.</p>
-        <a href="https://github.com/binit-ops/NexusSU/releases" class="button">Download APK</a>
+        <p class="subtitle">A kernel-native, zero-file root solution for Android.</p>
+        
+        <div class="features-grid">
+            <div class="feature-card">
+                <h3>Syscall Hooking</h3>
+                <p>Utilizes <code>prctl</code> magic numbers for kernel-to-userspace communication. No <code>/dev/</code> nodes, zero filesystem traces.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Dynamic SELinux Bypass</h3>
+                <p>Dynamically grants target processes full MAC permissions while keeping the system globally in <code>Enforcing</code> mode.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Advanced Procfs Stealth</h3>
+                <p>Actively overwrites root artifacts in <code>/proc/mounts</code> and <code>/proc/self/maps</code> to bypass Play Integrity and banking apps.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Real Systemless Modules</h3>
+                <p>Bind-mounts module files over <code>/system</code> without modifying the partition. Fully compatible with Magisk modules.</p>
+            </div>
+        </div>
 
-        <h3>Next-Generation Stealth</h3>
-        <p>NexusSU utilizes a multi-pillared architecture to provide root access while remaining completely invisible to user-space anti-cheat mechanisms:</p>
-        <ul>
-            <li><strong>Native Escalation:</strong> Grants UID 0 and full capability sets directly via <code>execve</code> interception—no detectable user-space su daemons required.</li>
-            <li><strong>Advanced VFS Masking:</strong> Defeats modern SafetyNet and Play Integrity sweeps by dropping immutable <code>-ENOENT</code> responses to <code>faccessat</code> and <code>vfs_statx</code> queries.</li>
-            <li><strong>Procfs Buffer Scrubbing:</strong> Bypasses aggressive banking apps by dynamically intercepting <code>vfs_read</code> and erasing root mount traces from <code>/proc/self/mountinfo</code> in-memory.</li>
-        </ul>
-
-        <h3>Target Compatibility</h3>
-        <table>
-            <tr>
-                <th>Kernel Version</th>
-                <th>Architecture</th>
-                <th>Support Type</th>
-            </tr>
-            <tr>
-                <td><strong>5.10 - 6.12 (GKI 2.0)</strong></td>
-                <td>Android 12+</td>
-                <td style="color: var(--success);">Full (Pre-built LKM)</td>
-            </tr>
-            <tr>
-                <td><strong>4.19 - 5.4 (GKI 1.0)</strong></td>
-                <td>Android 11</td>
-                <td style="color: var(--warning);">Manual Compile</td>
-            </tr>
-        </table>
+        <div class="getting-started">
+            <h2>Getting Started</h2>
+            <p>Ready to integrate NexusSU into your custom ROM or kernel?</p>
+            <a href="hooks.html" class="btn">View Integration Guide →</a>
+        </div>
     </div>
 </body>
 </html>
