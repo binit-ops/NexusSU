@@ -9,6 +9,7 @@ import java.io.FileOutputStream
 object NexusEngine {
     private const val TAG = "NexusEngine"
     private const val CONFIG_PATH = "/data/adb/nexussu/granted_uids.txt"
+    const val ADB_UID = 2000 // Standard Android ADB Shell UID
 
     init { try { System.loadLibrary("nexus_bridge") } catch (e: UnsatisfiedLinkError) {} }
 
@@ -89,6 +90,19 @@ object NexusEngine {
         getGrantedUids().forEach { revokeUidAccess(it) }
     }
 
+    // NEW: ADB Root Toggle
+    fun setAdbRootEnabled(enabled: Boolean): Boolean {
+        return if (enabled) {
+            grantUidAccess(ADB_UID)
+        } else {
+            revokeUidAccess(ADB_UID)
+        }
+    }
+
+    fun isAdbRootEnabled(): Boolean {
+        return getGrantedUids().contains(ADB_UID)
+    }
+
     fun enableSystemlessHosts(): Boolean {
         val cmd = "mkdir -p /data/adb/nexussu && echo '127.0.0.1 localhost' > /data/adb/nexussu/hosts && mount -o bind /data/adb/nexussu/hosts /system/etc/hosts"
         return RootShell.executeBoolean(cmd)
@@ -98,7 +112,6 @@ object NexusEngine {
         return RootShell.executeBoolean("umount /system/etc/hosts")
     }
 
-    // UPDATED: Now checks for the 'disable' file to set initial toggle state
     fun getInstalledModules(): List<ModuleItem> {
         val modules = mutableListOf<ModuleItem>()
         val result = RootShell.execute("ls /data/adb/nexussu/modules")
@@ -109,18 +122,13 @@ object NexusEngine {
                 val prop = RootShell.execute("cat /data/adb/nexussu/modules/$id/module.prop")
                 val name = prop.substringAfter("name=").substringBefore("\n").ifBlank { id }
                 val desc = prop.substringAfter("description=").substringBefore("\n").ifBlank { "No description" }
-                
-                // Check if disabled
                 val isDisabled = RootShell.execute("[ -f /data/adb/nexussu/modules/$id/disable ] && echo 1 || echo 0").trim() == "1"
-                
-                // Added 'id' to ModuleItem
                 modules.add(ModuleItem(id, name.firstOrNull()?.uppercase() ?: "M", name, desc, !isDisabled))
             }
         }
         return modules
     }
 
-    // NEW: Wrapper for module toggle
     fun setModuleEnabled(id: String, enabled: Boolean): Boolean {
         return RootShell.setModuleEnabled(id, enabled)
     }
