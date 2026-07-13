@@ -27,13 +27,11 @@ object NexusEngine {
         try {
             if (!escalateSelf()) return false
 
-            // Extract su binary
             val suAsset = context.assets.open("su.bin")
             val suFile = File(context.filesDir, "su")
             FileOutputStream(suFile).use { output -> suAsset.copyTo(output) }
             suFile.setExecutable(true, false)
 
-            // Extract boot daemon
             val daemonAsset = context.assets.open("nexussu_daemon")
             val daemonFile = File(context.filesDir, "nexussu_daemon")
             FileOutputStream(daemonFile).use { output -> daemonAsset.copyTo(output) }
@@ -100,6 +98,7 @@ object NexusEngine {
         return RootShell.executeBoolean("umount /system/etc/hosts")
     }
 
+    // UPDATED: Now checks for the 'disable' file to set initial toggle state
     fun getInstalledModules(): List<ModuleItem> {
         val modules = mutableListOf<ModuleItem>()
         val result = RootShell.execute("ls /data/adb/nexussu/modules")
@@ -110,9 +109,19 @@ object NexusEngine {
                 val prop = RootShell.execute("cat /data/adb/nexussu/modules/$id/module.prop")
                 val name = prop.substringAfter("name=").substringBefore("\n").ifBlank { id }
                 val desc = prop.substringAfter("description=").substringBefore("\n").ifBlank { "No description" }
-                modules.add(ModuleItem(name.firstOrNull()?.uppercase() ?: "M", name, desc, true))
+                
+                // Check if disabled
+                val isDisabled = RootShell.execute("[ -f /data/adb/nexussu/modules/$id/disable ] && echo 1 || echo 0").trim() == "1"
+                
+                // Added 'id' to ModuleItem
+                modules.add(ModuleItem(id, name.firstOrNull()?.uppercase() ?: "M", name, desc, !isDisabled))
             }
         }
         return modules
+    }
+
+    // NEW: Wrapper for module toggle
+    fun setModuleEnabled(id: String, enabled: Boolean): Boolean {
+        return RootShell.setModuleEnabled(id, enabled)
     }
 }
