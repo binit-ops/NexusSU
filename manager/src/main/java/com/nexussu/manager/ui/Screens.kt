@@ -2,6 +2,7 @@ package com.nexussu.manager.ui
 
 import com.nexussu.manager.core.NexusEngine
 import com.nexussu.manager.core.RootShell
+import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -71,13 +72,31 @@ fun Drawable.toImageBitmap(): androidx.compose.ui.graphics.ImageBitmap {
 @Composable
 fun HomeScreen(onOpenAdvanced: () -> Unit) {
     val p = LocalNexusPalette.current
-    val grantedCount = remember { NexusEngine.getGrantedUids().size }
+    val scope = rememberCoroutineScope()
     
+    // Stats states
+    var grantedCount by remember { mutableStateOf(0) }
+    var moduleCount by remember { mutableStateOf(0) }
+    var isRootActive by remember { mutableStateOf(false) }
+
+    // Fetch real stats in background
+    LaunchedEffect(Unit) {
+        scope.launch(Dispatchers.IO) {
+            isRootActive = NexusEngine.isKernelActive()
+            if (isRootActive) {
+                grantedCount = NexusEngine.getGrantedUids().size
+                moduleCount = NexusEngine.getActiveModulesCount()
+            }
+        }
+    }
+
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Column(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            RootLens()
+            // Pass isRootActive to the lens
+            RootLens(isActive = isRootActive)
             Spacer(Modifier.height(12.dp))
-            Text("$grantedCount apps granted · 0 modules active", color = p.dim, fontSize = 11.sp, fontFamily = MonoFont)
+            // Display real stats
+            Text("$grantedCount apps granted · $moduleCount modules active", color = p.dim, fontSize = 11.sp, fontFamily = MonoFont)
         }
         DeviceCard(onOpenAdvanced = onOpenAdvanced)
     }
@@ -275,10 +294,8 @@ fun LogScreen() {
     val scope = rememberCoroutineScope()
     var logContent by remember { mutableStateOf("Loading logs...") }
 
-    // Fetch logs when screen appears
     LaunchedEffect(Unit) {
         scope.launch(Dispatchers.IO) {
-            // Read the log file, or return "No logs" if it doesn't exist yet
             val result = RootShell.execute("cat /data/adb/nexussu/logs.txt 2>/dev/null || echo 'No root requests recorded yet.'")
             logContent = result
         }
@@ -287,8 +304,6 @@ fun LogScreen() {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
             Text("Root Access Logs", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            
-            // Clear Logs Button
             Box(
                 Modifier.clip(CircleShape).background(p.glassFill).clickable(remember { MutableInteractionSource() }, indication = null) {
                     scope.launch(Dispatchers.IO) {
@@ -300,12 +315,10 @@ fun LogScreen() {
                 Text("Clear", color = p.accent, fontSize = 12.sp, fontWeight = FontWeight.Medium)
             }
         }
-        
         GlassCard {
-            // Terminal-style log display
             Text(
                 text = logContent,
-                color = p.accent, // Green terminal text
+                color = p.accent,
                 fontSize = 12.sp,
                 fontFamily = MonoFont,
                 modifier = Modifier.fillMaxWidth().padding(16.dp)
@@ -401,7 +414,7 @@ fun ModuleScreen() {
     }
 }
 
-  // ---------- Settings ----------
+        // ---------- Settings ----------
 @Composable
 fun SettingsScreen(
     darkTheme: Boolean, onDarkThemeChange: (Boolean) -> Unit,
@@ -414,8 +427,6 @@ fun SettingsScreen(
     val engineVersion = remember { NexusEngine.getEngineVersion() }
     var systemlessHosts by remember { mutableStateOf(false) }
     var safeMode by remember { mutableStateOf(RootShell.execute("[ -f /data/adb/nexussu/safemode ] && echo 1 || echo 0").trim() == "1") }
-    
-    // NEW: ADB Root State
     var adbRoot by remember { mutableStateOf(NexusEngine.isAdbRootEnabled()) }
     
     var isCheckingUpdates by remember { mutableStateOf(false) }
@@ -452,7 +463,6 @@ fun SettingsScreen(
         SectionLabel("Root Behavior")
         GlassCard {
             Column {
-                // NEW: ADB Root Toggle
                 BehaviorToggle("Allow ADB Root", "Grant root permissions to ADB Shell (UID 2000)", checked = adbRoot) { isChecked ->
                     scope.launch(Dispatchers.IO) {
                         val success = NexusEngine.setAdbRootEnabled(isChecked)
@@ -572,5 +582,51 @@ fun SettingsRow(title: String, subtitle: String, onClick: () -> Unit) {
             Text(subtitle, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
         }
         Box(Modifier.rotate(180f)) { BackIcon(tint = p.dim) }
+    }
+}
+
+// ---------- Root Lens ----------
+@Composable
+fun RootLens(modifier: Modifier = Modifier, isActive: Boolean = false) {
+    val p = LocalNexusPalette.current
+    val infinite = rememberInfiniteTransition(label = "lensIdle")
+    val idleX by infinite.animateFloat(-0.08f, 0.12f,
+        infiniteRepeatable(tween(3500, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "idleX")
+    val idleY by infinite.animateFloat(-0.06f, 0.10f,
+        infiniteRepeatable(tween(4200, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "idleY")
+
+    var dragOffset by remember { mutableStateOf<Offset?>(null) }
+    val scope = rememberCoroutineScope()
+    var idleJob by remember { mutableStateOf<Job?>(null) }
+
+    Box(
+        modifier.size(172.dp).pointerInput(Unit) {
+            detectDragGestures(
+                onDrag = { change, _ ->
+                    idleJob?.cancel()
+                    dragOffset = Offset((change.position.x / size.width) - 0.5f, (change.position.y / size.height) - 0.5f)
+                },
+                onDragEnd = { idleJob = scope.launch { delay(1100); dragOffset = null } }
+            )
+        },
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            drawCircle(Brush.sweepGradient(listOf(p.accent, p.accent2, p.accent)))
+            val hx = dragOffset?.x ?: idleX
+            val hy = dragOffset?.y ?: idleY
+            drawCircle(
+                brush = Brush.radialGradient(listOf(Color.White.copy(alpha = 0.75f), Color.Transparent)),
+                radius = size.minDimension * 0.4f,
+                center = Offset(size.width * (0.5f + hx), size.height * (0.5f + hy)),
+                blendMode = BlendMode.Softlight
+            )
+        }
+        Box(Modifier.size(110.dp).clip(CircleShape).background(p.void.copy(alpha = 0.55f)), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("ROOT", color = p.dim, fontSize = 11.sp, letterSpacing = 1.sp)
+                Text(if (isActive) "Active" else "Inactive", color = if (isActive) p.ink else p.dim, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+            }
+        }
     }
 }
