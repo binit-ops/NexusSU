@@ -315,7 +315,6 @@ fun LogScreen() {
 }
 
 // ---------- Module ----------
-// UPDATED: Added 'id' field
 data class ModuleItem(val id: String, val initial: String, val name: String, val desc: String, val enabled: Boolean)
 
 @Composable
@@ -373,12 +372,24 @@ fun ModuleScreen() {
                                 Text(m.name, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
                                 Text(m.desc, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
                             }
-                            // UPDATED: Wired to real mount/unmount logic
+                            
+                            // Uninstall Text Button
+                            Text(
+                                text = "Uninstall",
+                                color = p.dim,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.clickable(remember { MutableInteractionSource() }, indication = null) {
+                                    scope.launch(Dispatchers.IO) {
+                                        NexusEngine.deleteModule(m.id)
+                                        modules.clear(); modules.addAll(NexusEngine.getInstalledModules())
+                                    }
+                                }.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+
                             GlassToggle(m.enabled, onCheckedChange = { checked ->
-                                modules[i] = m.copy(enabled = checked) // Update UI immediately
-                                scope.launch(Dispatchers.IO) {
-                                    NexusEngine.setModuleEnabled(m.id, checked) // Mount/Unmount in background
-                                }
+                                modules[i] = m.copy(enabled = checked)
+                                scope.launch(Dispatchers.IO) { NexusEngine.setModuleEnabled(m.id, checked) }
                             })
                         }
                         if (i < modules.lastIndex) Divider(color = p.glassEdge, thickness = 0.5.dp)
@@ -389,11 +400,6 @@ fun ModuleScreen() {
         OutlinedButton(onClick = { zipPickerLauncher.launch("application/zip") }, enabled = !isInstalling, colors = ButtonDefaults.outlinedButtonColors(contentColor = p.dim), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) { Text(if (isInstalling) "Installing..." else "+ Install module") }
     }
 }
-                    
-                    Toast.makeText(context, "All root permissions revoked", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
 
   // ---------- Settings ----------
 @Composable
