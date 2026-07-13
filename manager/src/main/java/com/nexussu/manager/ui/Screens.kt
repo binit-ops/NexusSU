@@ -356,7 +356,7 @@ fun ModuleScreen() {
     }
 }
                     
-// ---------- Settings ----------
+  // ---------- Settings ----------
 @Composable
 fun SettingsScreen(
     darkTheme: Boolean, onDarkThemeChange: (Boolean) -> Unit,
@@ -368,6 +368,10 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     val engineVersion = remember { NexusEngine.getEngineVersion() }
     var systemlessHosts by remember { mutableStateOf(false) }
+    
+    // Update states
+    var isCheckingUpdates by remember { mutableStateOf(false) }
+    var updateUrl by remember { mutableStateOf<String?>(null) }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -393,6 +397,35 @@ fun SettingsScreen(
                         val success = if (isChecked) NexusEngine.enableSystemlessHosts() else NexusEngine.disableSystemlessHosts()
                         if (success) systemlessHosts = isChecked
                     }
+                }
+            }
+        }
+
+        SectionLabel("Updates")
+        GlassCard {
+            Column {
+                SettingsRow("Check for Updates", if (isCheckingUpdates) "Checking..." else "Check for new NexusSU releases") {
+                    if (!isCheckingUpdates) {
+                        isCheckingUpdates = true
+                        scope.launch(Dispatchers.IO) {
+                            val url = UpdateChecker.checkForUpdates(context)
+                            isCheckingUpdates = false
+                            updateUrl = url
+                            if (url == null) {
+                                Toast.makeText(context, "NexusSU is up to date!", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // If update is available, show a new row to open the browser
+        if (updateUrl != null) {
+            GlassCard {
+                SettingsRow("Update Available!", "Tap here to download v1.0.1") {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(updateUrl))
+                    context.startActivity(intent)
                 }
             }
         }
@@ -456,4 +489,4 @@ fun SettingsRow(title: String, subtitle: String, onClick: () -> Unit) {
         }
         Box(Modifier.rotate(180f)) { BackIcon(tint = p.dim) }
     }
-}
+}  
