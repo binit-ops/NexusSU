@@ -41,17 +41,28 @@ class MainActivity : ComponentActivity() {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             display?.supportedModes?.maxByOrNull { it.refreshRate }?.let { maxMode ->
-                window.attributes = window.attributes.apply {
-                    preferredDisplayModeId = maxMode.modeId
-                }
+                window.attributes = window.attributes.apply { preferredDisplayModeId = maxMode.modeId }
             }
         }
 
         setContent {
-            var darkTheme by remember { mutableStateOf(true) }
+            val context = LocalContext.current
+            val prefs = remember { context.getSharedPreferences("nexussu_prefs", 0) }
+            
+            // Load saved theme, default to true (Dark Mode)
+            var darkTheme by remember { mutableStateOf(prefs.getBoolean("dark_theme", true)) }
             var accent by remember { mutableStateOf(AccentTheme.Nexus) }
+            
             NexusSUTheme(darkTheme, accent) {
-                NexusSUApp(darkTheme, { darkTheme = it }, accent, { accent = it })
+                NexusSUApp(
+                    darkTheme = darkTheme,
+                    onDarkThemeChange = { 
+                        darkTheme = it
+                        prefs.edit().putBoolean("dark_theme", it).apply() // Save theme
+                    },
+                    accent = accent,
+                    onAccentChange = { accent = it }
+                )
             }
         }
     }
@@ -66,7 +77,6 @@ fun NexusSUApp(
     val hazeState = remember { HazeState() }
     var tab by remember { mutableStateOf(Tab.Home) }
     var showSettings by remember { mutableStateOf(false) }
-    
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("nexussu_prefs", 0) }
     var isSetupComplete by remember { mutableStateOf(prefs.getBoolean("is_su_installed", false)) }
@@ -85,9 +95,7 @@ fun NexusSUApp(
     CompositionLocalProvider(LocalHazeState provides hazeState) {
         Box(Modifier.fillMaxSize()) {
             Box(
-                Modifier.fillMaxSize()
-                    .background(Brush.verticalGradient(listOf(p.void, p.voidGradientEnd)))
-                    .hazeSource(state = hazeState)
+                Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(p.void, p.voidGradientEnd))).hazeSource(state = hazeState)
             ) { LiquidBlobs() }
 
             Column(Modifier.fillMaxSize().systemBarsPadding().padding(16.dp)) {
@@ -111,9 +119,7 @@ fun NexusSUApp(
                     } else {
                         AnimatedContent(
                             targetState = if (showSettings) "settings" else tab.name,
-                            transitionSpec = {
-                                (fadeIn() + slideInVertically { it / 8 }) togetherWith (fadeOut() + slideOutVertically { -it / 8 })
-                            },
+                            transitionSpec = { (fadeIn() + slideInVertically { it / 8 }) togetherWith (fadeOut() + slideOutVertically { -it / 8 }) },
                             label = "screen"
                         ) { state ->
                             when (state) {
@@ -141,28 +147,15 @@ fun LiquidBlobs() {
     val p = LocalNexusPalette.current
     val infinite = rememberInfiniteTransition(label = "blobs")
     val d by infinite.animateFloat(0f, 1f, infiniteRepeatable(tween(17000, easing = LinearEasing), RepeatMode.Reverse), label = "d")
-    
     Box(Modifier.fillMaxSize()) {
         Box(
-            Modifier
-                .graphicsLayer {
-                    translationX = (-60 + d * 40).dp.toPx()
-                    translationY = (-60 + d * 30).dp.toPx()
-                }
-                .size(300.dp)
-                .blur(70.dp)
-                .background(p.accent.copy(alpha = 0.5f), CircleShape)
+            Modifier.graphicsLayer { translationX = (-60 + d * 40).dp.toPx(); translationY = (-60 + d * 30).dp.toPx() }
+                .size(300.dp).blur(70.dp).background(p.accent.copy(alpha = 0.5f), CircleShape)
         )
         Box(
-            Modifier
-                .align(Alignment.BottomEnd)
-                .graphicsLayer {
-                    translationX = (60 - d * 30).dp.toPx()
-                    translationY = (60 - d * 40).dp.toPx()
-                }
-                .size(260.dp)
-                .blur(70.dp)
-                .background(p.accent2.copy(alpha = 0.5f), CircleShape)
+            Modifier.align(Alignment.BottomEnd)
+                .graphicsLayer { translationX = (60 - d * 30).dp.toPx(); translationY = (60 - d * 40).dp.toPx() }
+                .size(260.dp).blur(70.dp).background(p.accent2.copy(alpha = 0.5f), CircleShape)
         )
     }
 }
