@@ -290,7 +290,6 @@ fun ModuleScreen() {
     val modules = remember { mutableStateListOf<ModuleItem>() }
     var isInstalling by remember { mutableStateOf(false) }
 
-    // Load real modules on launch
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             val installed = NexusEngine.getInstalledModules()
@@ -313,7 +312,7 @@ fun ModuleScreen() {
                     isInstalling = false
                     if (success) {
                         Toast.makeText(context, "Module installed!", Toast.LENGTH_SHORT).show()
-                        modules.clear(); modules.addAll(NexusEngine.getInstalledModules()) // Refresh list
+                        modules.clear(); modules.addAll(NexusEngine.getInstalledModules())
                     } else {
                         Toast.makeText(context, "Installation failed.", Toast.LENGTH_SHORT).show()
                     }
@@ -389,7 +388,7 @@ fun SettingsScreen(
                 }
             }
         }
-        
+
         SectionLabel("System Operations")
         GlassCard {
             Column {
@@ -400,7 +399,7 @@ fun SettingsScreen(
                 SettingsRow("Reboot to Bootloader", "Restart into fastboot mode") { scope.launch(Dispatchers.IO) { RootShell.execute("setprop sys.powerctl reboot,bootloader") } }
             }
         }
- 
+
         SectionLabel("Data Management")
         GlassCard {
             Column {
