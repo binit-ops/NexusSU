@@ -10,9 +10,7 @@ object NexusEngine {
     private const val TAG = "NexusEngine"
     private const val CONFIG_PATH = "/data/adb/nexussu/granted_uids.txt"
 
-    init {
-        try { System.loadLibrary("nexus_bridge") } catch (e: UnsatisfiedLinkError) {}
-    }
+    init { try { System.loadLibrary("nexus_bridge") } catch (e: UnsatisfiedLinkError) {} }
 
     external fun registerManager(): Boolean
     external fun grantUidAccess(uid: Int): Boolean
@@ -29,16 +27,25 @@ object NexusEngine {
         try {
             if (!escalateSelf()) return false
 
+            // Extract su binary
             val suAsset = context.assets.open("su.bin")
             val suFile = File(context.filesDir, "su")
             FileOutputStream(suFile).use { output -> suAsset.copyTo(output) }
             suFile.setExecutable(true, false)
 
+            // Extract boot daemon
+            val daemonAsset = context.assets.open("nexussu_daemon")
+            val daemonFile = File(context.filesDir, "nexussu_daemon")
+            FileOutputStream(daemonFile).use { output -> daemonAsset.copyTo(output) }
+            daemonFile.setExecutable(true, false)
+
             val commands = arrayOf(
                 "sh", "-c",
                 "mkdir -p /data/adb/nexussu/bin && " +
                 "cp ${suFile.absolutePath} /data/adb/nexussu/bin/su && " +
+                "cp ${daemonFile.absolutePath} /data/adb/nexussu/bin/nexussu_daemon && " +
                 "chmod 0755 /data/adb/nexussu/bin/su && " +
+                "chmod 0755 /data/adb/nexussu/bin/nexussu_daemon && " +
                 "mount --bind /data/adb/nexussu/bin/su /system/bin/su"
             )
             
@@ -46,7 +53,6 @@ object NexusEngine {
             process.waitFor()
             
             if (process.exitValue() == 0) {
-                Log.i(TAG, "Real su binary successfully bind-mounted to /system/bin/su")
                 grantUidAccess(android.os.Process.myUid())
                 return true
             }
