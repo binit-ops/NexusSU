@@ -6,74 +6,87 @@
     <title>NexusSU | Compilation Guide</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+    <style>
+        .code-window { background: #1e1e2e; border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--border); }
+        .code-toolbar { background: #181825; padding: 10px 15px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .code-info { display: flex; gap: 10px; align-items: center; }
+        .file-badge { background: var(--accent); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-family: monospace; }
+        .search-badge { color: #a6accd; font-size: 12px; font-family: monospace; }
+        pre[class*="language-"] { margin: 0; padding: 15px; background: transparent !important; font-size: 14px; }
+        .script-block { background: #1e1e2e; color: #a6accd; padding: 15px; border-radius: 8px; font-family: monospace; margin-bottom: 20px; border-left: 4px solid var(--accent); }
+    </style>
 </head>
 <body>
     <nav>
         <a href="index.html">Home</a>
-        <a href="hooks.html">Kernel Hooks</a>
+        <a href="hooks.html">Kernel Integration</a>
         <a href="compile.html" class="active">Compilation</a>
     </nav>
 
     <div class="content hero">
-        <h1>Building the Engine</h1>
-        <p>Because legacy GKI 1.0 kernels do not support universal loadable modules, the NexusSU hooks must be compiled directly into the kernel source tree.</p>
+        <h1>Compilation Guide</h1>
+        <p>This guide covers how to compile both the NexusSU Manager App and the patched kernel.</p>
 
-        <h3>1. Prepare Environment</h3>
+        <hr style="margin: 40px 0; border-color: var(--border);">
+
+        <!-- PART 1: MANAGER APP -->
+        <h2>Part 1: Building the Manager App (APK)</h2>
+        <p>The Manager App is built using Gradle. The build process automatically uses the Android NDK to compile the native <code>su</code> binary and the <code>nexussu_daemon</code> from C source code, packaging them into the APK's <code>assets</code> folder.</p>
+
+        <h3>Method A: GitHub Actions (Recommended)</h3>
+        <p>The easiest way to build the Manager App is via GitHub Actions. The repository includes a workflow that handles the entire build process.</p>
+        <ol>
+            <li>Push your code to the <code>main</code> branch of your GitHub repository.</li>
+            <li>Go to the <strong>Actions</strong> tab on GitHub.</li>
+            <li>The workflow will automatically download Gradle 8.11.1, compile the native C code, and build the APK.</li>
+            <li>Once complete, download the <code>NexusSU-Manager-APK</code> artifact from the workflow summary page.</li>
+        </ol>
+
+        <h3>Method B: Local Build (Android Studio)</h3>
+        <p>If you prefer to build locally, ensure you have Android Studio and the Android NDK (version 25.1.8937393 or newer) installed.</p>
+        <div class="script-block">
+            $ git clone https://github.com/your-username/NexusSU.git<br>
+            $ cd NexusSU<br>
+            $ ./gradlew assembleRelease
+        </div>
+        <p>The compiled APK will be located in <code>manager/build/outputs/apk/release/</code>.</p>
+
+        <hr style="margin: 40px 0; border-color: var(--border);">
+
+        <!-- PART 2: KERNEL BUILD -->
+        <h2>Part 2: Building the Kernel</h2>
+        <p>Once you have patched your kernel source using the <code>apply.sh</code> script (as described in the <a href="hooks.html">Kernel Integration</a> guide), you can compile the kernel using the standard Android build process.</p>
+
         <div class="code-window">
             <div class="code-toolbar">
-                <span class="file-badge">Termux/Proot</span>
-                <div class="code-actions"><button onclick="copyCode(this)">📋 Copy</button></div>
+                <div class="code-info">
+                    <span class="file-badge">Terminal</span>
+                    <span class="search-badge">💻 Kernel Build Environment</span>
+                </div>
             </div>
             <pre><code class="language-bash">
-apt update && apt upgrade -y
-apt install git make bc bison build-essential zip curl flex \
-    libssl-dev libfl-dev wget gcc-aarch64-linux-gnu -y
+# 1. Setup your environment variables
+export ARCH=arm64
+export SUBARCH=arm64
+export CROSS_COMPILE=aarch64-linux-android-
+export CROSS_COMPILE_COMPAT=arm-linux-androideabi-
+
+# 2. Navigate to your patched kernel source
+cd /path/to/your/kernel/source
+
+# 3. Load your device's defconfig
+make OEM_defconfig
+
+# 4. Build the kernel
+make -j$(nproc)
             </code></pre>
         </div>
+        
+        <p>Once compilation is finished, the kernel image (usually <code>Image.gz-dtb</code> or <code>Image</code>) will be located in <code>arch/arm64/boot/</code>. You can then pack this into an AnyKernel3 zip or integrate it directly into your ROM's device tree.</p>
 
-        <h3>2. Fetch & Link</h3>
-        <div class="code-window">
-            <div class="code-toolbar">
-                <span class="file-badge">Makefile Injections</span>
-                <div class="code-actions"><button onclick="copyCode(this)">📋 Copy</button></div>
-            </div>
-            <pre><code class="language-bash">
-echo "obj-y += nexussu_state.o" >> kernel/Makefile
-echo "obj-y += nexussu.o" >> drivers/char/Makefile
-            </code></pre>
-        </div>
+        <h3>Important Note on Boot Daemons</h3>
+        <p>The NexusSU Manager App installs the <code>nexussu_daemon</code> to <code>/data/adb/nexussu/bin/</code> on first launch. For the daemon to run on boot, ensure your ROM's <code>init.nexussu.rc</code> script is configured as detailed in the <a href="rom_integration.html">ROM Integration Guide</a>.</p>
 
-        <h3>3. Build</h3>
-        <div class="code-window">
-            <div class="code-toolbar">
-                <span class="file-badge">Build Command</span>
-                <div class="code-actions"><button onclick="copyCode(this)">📋 Copy</button></div>
-            </div>
-            <pre><code class="language-bash">
-# Clean the build directory
-make clean && make mrproper
-
-# Generate the config targeting ARM64
-make ARCH=arm64 vendor/your_device_defconfig O=out
-
-# Compile the kernel with the cross-compiler installed in Step 1
-make -j$(nproc --all) \
-    O=out \
-    ARCH=arm64 \
-    CROSS_COMPILE=aarch64-linux-gnu-
-            </code></pre>
-        </div>
     </div>
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
-    <script>
-        function copyCode(btn) {
-            const code = btn.closest('.code-window').querySelector('code').innerText;
-            navigator.clipboard.writeText(code);
-            const original = btn.innerText;
-            btn.innerText = '✅ Copied!';
-            setTimeout(() => btn.innerText = original, 2000);
-        }
-    </script>
 </body>
 </html>
