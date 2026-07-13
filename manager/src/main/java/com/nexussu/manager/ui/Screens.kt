@@ -272,10 +272,44 @@ fun AppRow(app: GrantedApp, onToggleRoot: (Boolean) -> Unit, onToggleExclude: (B
 @Composable
 fun LogScreen() {
     val p = LocalNexusPalette.current
+    val scope = rememberCoroutineScope()
+    var logContent by remember { mutableStateOf("Loading logs...") }
+
+    // Fetch logs when screen appears
+    LaunchedEffect(Unit) {
+        scope.launch(Dispatchers.IO) {
+            // Read the log file, or return "No logs" if it doesn't exist yet
+            val result = RootShell.execute("cat /data/adb/nexussu/logs.txt 2>/dev/null || echo 'No root requests recorded yet.'")
+            logContent = result
+        }
+    }
+
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Logs", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+            Text("Root Access Logs", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            
+            // Clear Logs Button
+            Box(
+                Modifier.clip(CircleShape).background(p.glassFill).clickable(remember { MutableInteractionSource() }, indication = null) {
+                    scope.launch(Dispatchers.IO) {
+                        RootShell.execute("rm -f /data/adb/nexussu/logs.txt")
+                        logContent = "No root requests recorded yet."
+                    }
+                }.padding(8.dp)
+            ) {
+                Text("Clear", color = p.accent, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            }
+        }
+        
         GlassCard {
-            Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { Text("No logs recorded yet", color = p.dim, fontSize = 13.sp, fontFamily = MonoFont) }
+            // Terminal-style log display
+            Text(
+                text = logContent,
+                color = p.accent, // Green terminal text
+                fontSize = 12.sp,
+                fontFamily = MonoFont,
+                modifier = Modifier.fillMaxWidth().padding(16.dp)
+            )
         }
     }
 }
