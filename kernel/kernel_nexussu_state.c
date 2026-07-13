@@ -70,14 +70,25 @@ void nexussu_revoke_trusted_uid(uid_t uid) {
     spin_unlock_irqrestore(&nexussu_lock, flags);
 }
 
-/* VFS Stealth Check: Used by faccessat and statx to hide root artifacts */
+/* 
+ * VFS Stealth Check: Used by faccessat and statx to hide root artifacts.
+ * This actively lies to banking apps and Play Protect to prevent detection.
+ */
 bool nexussu_stealth_check(const char __user *filename) {
-    char buf[128];
+    char buf[256];
     if (!filename) return false;
     
-    if (copy_from_user(buf, filename, 127) == 0) {
-        buf[127] = '\0';
-        if (strstr(buf, "su") || strstr(buf, "magisk") || strstr(buf, "nexussu")) {
+    /* copy_from_user might fail if the pointer is invalid, but we proceed if it works */
+    if (copy_from_user(buf, filename, 255) == 0) {
+        buf[255] = '\0';
+        
+        /* Hide the su binary and Magisk artifacts */
+        if (strstr(buf, "/su") != NULL || strstr(buf, "magisk") != NULL) {
+            return true;
+        }
+        
+        /* Hide the NexusSU Manager App package from other apps (Banking apps) */
+        if (strstr(buf, "com.nexussu.manager") != NULL || strstr(buf, "nexussu") != NULL) {
             return true;
         }
     }
@@ -91,6 +102,8 @@ bool nexussu_stealth_check(const char __user *filename) {
 void nexussu_scrub_proc_buffer(struct file *file, char __user *buf, size_t count, ssize_t *ret) {
     char *kbuf;
     ssize_t read_bytes = *ret;
+    bool modified = false;
+    char *ptr;
     
     if (read_bytes <= 0 || !buf || !file) return;
     
@@ -102,9 +115,6 @@ void nexussu_scrub_proc_buffer(struct file *file, char __user *buf, size_t count
         return; 
     }
     kbuf[read_bytes] = '\0';
-    
-    bool modified = false;
-    char *ptr;
     
     while ((ptr = strstr(kbuf, "magisk")) != NULL) {
         memset(ptr, ' ', 6);
