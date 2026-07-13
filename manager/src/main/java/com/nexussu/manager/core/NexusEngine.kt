@@ -129,11 +129,26 @@ object NexusEngine {
         return modules
     }
 
+    // NEW: Fast count of active modules
+    fun getActiveModulesCount(): Int {
+        val result = RootShell.execute("ls /data/adb/nexussu/modules 2>/dev/null")
+        if (result == "Error" || result.isBlank()) return 0
+        
+        var count = 0
+        result.split("\n").forEach { id ->
+            if (id.isNotBlank()) {
+                val isDisabled = RootShell.execute("[ -f /data/adb/nexussu/modules/$id/disable ] && echo 1 || echo 0").trim() == "1"
+                if (!isDisabled) count++
+            }
+        }
+        return count
+    }
+
     fun setModuleEnabled(id: String, enabled: Boolean): Boolean {
         return RootShell.setModuleEnabled(id, enabled)
     }
 
-    // NEW: Wrapper for module deletion
+    // Wrapper for module deletion
     fun deleteModule(id: String): Boolean {
         return RootShell.deleteModule(id)
     }
