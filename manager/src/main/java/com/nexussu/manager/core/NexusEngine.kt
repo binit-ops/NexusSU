@@ -90,7 +90,7 @@ object NexusEngine {
         getGrantedUids().forEach { revokeUidAccess(it) }
     }
 
-    // NEW: ADB Root Toggle
+    // ADB Root Toggle
     fun setAdbRootEnabled(enabled: Boolean): Boolean {
         return if (enabled) {
             grantUidAccess(ADB_UID)
@@ -131,5 +131,10 @@ object NexusEngine {
 
     fun setModuleEnabled(id: String, enabled: Boolean): Boolean {
         return RootShell.setModuleEnabled(id, enabled)
+    }
+
+    // NEW: Wrapper for module deletion
+    fun deleteModule(id: String): Boolean {
+        return RootShell.deleteModule(id)
     }
 }
