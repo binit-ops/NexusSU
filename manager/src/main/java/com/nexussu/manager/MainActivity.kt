@@ -39,7 +39,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Force the OS to unlock the highest supported refresh rate natively
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             display?.supportedModes?.maxByOrNull { it.refreshRate }?.let { maxMode ->
                 window.attributes = window.attributes.apply {
@@ -68,22 +67,16 @@ fun NexusSUApp(
     var tab by remember { mutableStateOf(Tab.Home) }
     var showSettings by remember { mutableStateOf(false) }
     
-    // AUTOMATION: Check if this is the first time the app is opened
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("nexussu_prefs", 0) }
     var isSetupComplete by remember { mutableStateOf(prefs.getBoolean("is_su_installed", false)) }
 
-    // If not setup, automatically install the su binary in the background
     LaunchedEffect(isSetupComplete) {
         if (!isSetupComplete) {
             withContext(Dispatchers.IO) {
-                // Automatically escalate and mount the su binary
                 NexusEngine.installSuBinary(context)
-                
-                // Save to prefs so we don't do this every time the app opens
+                NexusEngine.applySavedRootGrants()
                 prefs.edit().putBoolean("is_su_installed", true).apply()
-                
-                // Tell the UI we are ready
                 isSetupComplete = true
             }
         }
@@ -111,7 +104,6 @@ fun NexusSUApp(
                 }
 
                 Box(Modifier.weight(1f)) {
-                    // Show a loading screen while setting up, otherwise show the normal app
                     if (!isSetupComplete) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text("Initializing Root Environment...", color = p.accent, fontFamily = MonoFont, fontSize = 14.sp)
