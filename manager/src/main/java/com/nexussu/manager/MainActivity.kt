@@ -51,7 +51,10 @@ class MainActivity : ComponentActivity() {
             
             // Load saved theme, default to true (Dark Mode)
             var darkTheme by remember { mutableStateOf(prefs.getBoolean("dark_theme", true)) }
-            var accent by remember { mutableStateOf(AccentTheme.Nexus) }
+            
+            // Load saved accent, default to Nexus
+            val savedAccentName = prefs.getString("accent_theme", AccentTheme.Nexus.name)
+            var accent by remember { mutableStateOf(AccentTheme.valueOf(savedAccentName ?: AccentTheme.Nexus.name)) }
             
             NexusSUTheme(darkTheme, accent) {
                 NexusSUApp(
@@ -61,7 +64,10 @@ class MainActivity : ComponentActivity() {
                         prefs.edit().putBoolean("dark_theme", it).apply() // Save theme
                     },
                     accent = accent,
-                    onAccentChange = { accent = it }
+                    onAccentChange = { 
+                        accent = it
+                        prefs.edit().putString("accent_theme", it.name).apply() // Save accent
+                    }
                 )
             }
         }
