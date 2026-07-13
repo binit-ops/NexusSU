@@ -11,9 +11,7 @@ object RootShell {
             val output = reader.readText()
             process.waitFor()
             output.trim()
-        } catch (e: Exception) {
-            "Error"
-        }
+        } catch (e: Exception) { "Error" }
     }
 
     fun executeBoolean(command: String): Boolean {
@@ -21,9 +19,7 @@ object RootShell {
             val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
             process.waitFor()
             process.exitValue() == 0
-        } catch (e: Exception) {
-            false
-        }
+        } catch (e: Exception) { false }
     }
 
     fun isRootAvailable(): Boolean = executeBoolean("id")
@@ -39,12 +35,11 @@ object RootShell {
                 mkdir -p /data/adb/nexussu/modules/$ID
                 cp -r /data/adb/nexussu/modules_temp/* /data/adb/nexussu/modules/$ID/
                 rm -rf /data/adb/nexussu/modules_temp
-                
                 if [ -d /data/adb/nexussu/modules/$ID/system ]; then
                     find /data/adb/nexussu/modules/$ID/system -type f | while read file; do
-                        target_path="/system${file#/data/adb/nexussu/modules/$ID/system}"
-                        mkdir -p $(dirname $target_path)
-                        mount --bind $file $target_path
+                        target_path="/system${'$'}{file#/data/adb/nexussu/modules/$ID/system}"
+                        mkdir -p ${'$'}(dirname ${'$'}target_path)
+                        mount --bind ${'$'}file ${'$'}target_path
                     done
                 fi
                 echo "SUCCESS"
@@ -53,6 +48,36 @@ object RootShell {
                 echo "FAILED"
             fi
         """.trimIndent()
+        return execute(cmd).contains("SUCCESS")
+    }
+
+    // NEW: Real-time Module Enable/Disable Logic
+    fun setModuleEnabled(id: String, enabled: Boolean): Boolean {
+        val basePath = "/data/adb/nexussu/modules/$id"
+        val cmd = if (enabled) {
+            """
+            rm -f $basePath/disable
+            if [ -d $basePath/system ]; then
+                find $basePath/system -type f | while read file; do
+                    target_path="/system\${file#$basePath/system}"
+                    mkdir -p \$(dirname \$target_path)
+                    mount --bind \$file \$target_path
+                done
+            fi
+            echo "SUCCESS"
+            """.trimIndent()
+        } else {
+            """
+            touch $basePath/disable
+            if [ -d $basePath/system ]; then
+                find $basePath/system -type f | while read file; do
+                    target_path="/system\${file#$basePath/system}"
+                    umount \$target_path 2>/dev/null
+                done
+            fi
+            echo "SUCCESS"
+            """.trimIndent()
+        }
         return execute(cmd).contains("SUCCESS")
     }
 }
