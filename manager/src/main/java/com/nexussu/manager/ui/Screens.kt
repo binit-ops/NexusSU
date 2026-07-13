@@ -390,7 +390,12 @@ fun ModuleScreen() {
     }
 }
                     
-  // ---------- Settings ----------
+                    Toast.makeText(context, "All root permissions revoked", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        // ---------- Settings ----------
 @Composable
 fun SettingsScreen(
     darkTheme: Boolean, onDarkThemeChange: (Boolean) -> Unit,
@@ -402,6 +407,7 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     val engineVersion = remember { NexusEngine.getEngineVersion() }
     var systemlessHosts by remember { mutableStateOf(false) }
+    var safeMode by remember { mutableStateOf(RootShell.execute("[ -f /data/adb/nexussu/safemode ] && echo 1 || echo 0").trim() == "1") }
     
     // Update states
     var isCheckingUpdates by remember { mutableStateOf(false) }
@@ -432,6 +438,15 @@ fun SettingsScreen(
                         if (success) systemlessHosts = isChecked
                     }
                 }
+                Divider(color = p.glassEdge, thickness = 0.5.dp)
+                // NEW: Safe Mode Toggle
+                BehaviorToggle("Safe Mode", "Disable all modules on next boot", checked = safeMode) { isChecked ->
+                    scope.launch(Dispatchers.IO) {
+                        if (isChecked) RootShell.execute("touch /data/adb/nexussu/safemode")
+                        else RootShell.execute("rm -f /data/adb/nexussu/safemode")
+                        safeMode = isChecked
+                    }
+                }
             }
         }
 
@@ -454,7 +469,6 @@ fun SettingsScreen(
             }
         }
 
-        // If update is available, show a new row to open the browser
         if (updateUrl != null) {
             GlassCard {
                 SettingsRow("Update Available!", "Tap here to download v1.0.1") {
@@ -483,6 +497,16 @@ fun SettingsScreen(
                 SettingsRow("Reset Superuser List", "Revoke all granted root permissions") {
                     scope.launch(Dispatchers.IO) { NexusEngine.clearAllRootGrants() }
                     Toast.makeText(context, "All root permissions revoked", Toast.LENGTH_SHORT).show()
+                }
+                Divider(color = p.glassEdge, thickness = 0.5.dp)
+                // NEW: Real Uninstall Routine
+                SettingsRow("Uninstall NexusSU", "Remove all binaries, modules, and data") {
+                    scope.launch(Dispatchers.IO) {
+                        RootShell.execute("umount /system/bin/su")
+                        RootShell.execute("umount /system/etc/hosts")
+                        RootShell.execute("rm -rf /data/adb/nexussu")
+                        Toast.makeText(context, "NexusSU uninstalled. Reboot your device.", Toast.LENGTH_LONG).show()
+                    }
                 }
             }
         }
@@ -523,4 +547,4 @@ fun SettingsRow(title: String, subtitle: String, onClick: () -> Unit) {
         }
         Box(Modifier.rotate(180f)) { BackIcon(tint = p.dim) }
     }
-}  
+}
