@@ -32,52 +32,123 @@
         <hr style="margin: 40px 0; border-color: var(--border);">
 
         <h2>Method 2: Manual Source Injection</h2>
+        <p>If the automated script fails due to heavy ROM source modifications, you can manually patch the kernel using the following steps.</p>
         
-        <h3>Step 1: Task Struct Flag (include/linux/sched.h)</h3>
+        <h3>Step 1: Add Core Engine Files</h3>
         <div class="code-window">
-            <div class="code-toolbar"><div class="code-info"><span class="file-badge">include/linux/sched.h</span></div></div>
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="file-badge">include/linux/nexussu.h</span>
+                    <span class="search-badge">📝 Action: Create New File</span>
+                </div>
+            </div>
+            <pre><code class="language-c diff-add">
++ #ifndef _NEXUSSU_H
++ #define _NEXUSSU_H
++ 
++ #include &lt;linux/cred.h&gt;
++ #include &lt;linux/uidgid.h&gt;
++ #include &lt;linux/sched.h&gt;
++ #include &lt;linux/fs.h&gt;
++ 
++ extern bool nexussu_is_granted(kuid_t uid);
++ extern void nexussu_add_trusted_uid(uid_t uid);
++ extern void nexussu_revoke_trusted_uid(uid_t uid);
++ extern bool nexussu_stealth_check(const char __user *filename);
++ extern void nexussu_scrub_proc_buffer(struct file *file, char __user *buf, size_t count, ssize_t *ret);
++ extern void nexussu_set_manager_uid(uid_t uid);
++ extern bool nexussu_is_manager(uid_t uid);
++ 
++ static inline void nexussu_escalate(void) {
++     struct cred *new_creds = prepare_creds();
++     if (new_creds != NULL) {
++         new_creds->uid = GLOBAL_ROOT_UID;
++         new_creds->gid = GLOBAL_ROOT_GID;
++         new_creds->euid = GLOBAL_ROOT_UID;
++         new_creds->egid = GLOBAL_ROOT_GID;
++         new_creds->suid = GLOBAL_ROOT_UID;
++         new_creds->sgid = GLOBAL_ROOT_GID;
++         new_creds->fsuid = GLOBAL_ROOT_UID;
++         new_creds->fsgid = GLOBAL_ROOT_GID;
++         new_creds->cap_permitted = CAP_FULL_SET;
++         new_creds->cap_effective = CAP_FULL_SET;
++         new_creds->cap_bset = CAP_FULL_SET;
++         new_creds->cap_ambient = CAP_FULL_SET;
++         commit_creds(new_creds);
++         current->nexussu_granted = true;
++     }
++ }
++ #endif
+            </code></pre>
+        </div>
+
+        <h3>Step 2: Task Struct Flag</h3>
+        <div class="code-window">
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="file-badge">include/linux/sched.h</span>
+                    <span class="search-badge">🔍 Search: struct task_struct {</span>
+                </div>
+            </div>
             <pre><code class="language-c">
   /* Locate struct task_struct { ... } */
+  /* Add this near the end of the struct, before the closing brace }; */
 <code class="diff-add">
 + bool nexussu_granted;
 </code>
             </code></pre>
         </div>
 
-        <h3>Step 2: prctl Syscall Hook (kernel/sys.c)</h3>
+        <h3>Step 3: prctl Syscall Hook</h3>
         <div class="code-window">
-            <div class="code-toolbar"><div class="code-info"><span class="file-badge">kernel/sys.c</span></div></div>
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="file-badge">kernel/sys.c</span>
+                    <span class="search-badge">🔍 Search: SYSCALL_DEFINE5(prctl</span>
+                </div>
+            </div>
             <pre><code class="language-c">
+  /* At the top of the file: */
 <code class="diff-add">
 + #include &lt;linux/nexussu.h&gt;
 </code>
 
-  SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
-          unsigned long, arg4, unsigned long, arg5)
-  {
+  /* Inside SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, ...) */
+  /* Add this hook at the very top of the function: */
 <code class="diff-add">
-+     if (option == 0x4E535553) { // "NSUS" Magic
-+         if (arg2 == 5) { nexussu_set_manager_uid(current_uid().val); return 0; }
-+         if (!nexussu_is_manager(current_uid().val)) return -EPERM;
-+         switch (arg2) {
-+             case 1: nexussu_add_trusted_uid((uid_t)arg3); return 0;
-+             case 2: nexussu_revoke_trusted_uid((uid_t)arg3); return 0;
-+             case 3: nexussu_escalate(); return 0;
-+             case 4: return 100;
-+             default: return -EINVAL;
-+         }
++ if (option == 0x4E535553) { // "NSUS" Magic
++     if (arg2 == 5) { nexussu_set_manager_uid(current_uid().val); return 0; }
++     if (!nexussu_is_manager(current_uid().val)) return -EPERM;
++     switch (arg2) {
++         case 1: nexussu_add_trusted_uid((uid_t)arg3); return 0;
++         case 2: nexussu_revoke_trusted_uid((uid_t)arg3); return 0;
++         case 3: nexussu_escalate(); return 0;
++         case 4: return 100;
++         default: return -EINVAL;
 +     }
++ }
 </code>
       // Original logic proceeds...
   }
             </code></pre>
         </div>
 
-        <h3>Step 3: Execution Interception (fs/exec.c)</h3>
+        <h3>Step 4: Execution Interception</h3>
         <div class="code-window">
-            <div class="code-toolbar"><div class="code-info"><span class="file-badge">fs/exec.c</span></div></div>
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="file-badge">fs/exec.c</span>
+                    <span class="search-badge">🔍 Search: prepare_bprm_creds</span>
+                </div>
+            </div>
             <pre><code class="language-c">
-  retval = prepare_bprm_creds(bprm);
+  /* At the top of the file: */
+<code class="diff-add">
++ #include &lt;linux/nexussu.h&gt;
+</code>
+
+  /* Locate: retval = prepare_bprm_creds(bprm); */
+  /* Add below it: */
 <code class="diff-add">
 + if (nexussu_is_granted(current_uid())) {
 +     nexussu_escalate();
@@ -87,30 +158,73 @@
             </code></pre>
         </div>
 
-        <h3>Step 4: Advanced VFS Stealth (fs/open.c)</h3>
+        <h3>Step 5: Advanced VFS Stealth</h3>
         <div class="code-window">
-            <div class="code-toolbar"><div class="code-info"><span class="file-badge">fs/open.c</span></div></div>
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="file-badge">fs/open.c</span>
+                    <span class="search-badge">🔍 Search: do_faccessat & faccessat2</span>
+                </div>
+            </div>
             <pre><code class="language-c">
-  SYSCALL_DEFINE3(do_faccessat, int, dfd, const char __user *, filename, int, mode) {
+  /* At the top of the file: */
 <code class="diff-add">
-+     if (nexussu_stealth_check(filename)) return -ENOENT;
++ #include &lt;linux/nexussu.h&gt;
 </code>
-  }
 
-  SYSCALL_DEFINE4(faccessat2, int, dfd, const char __user *, filename, int, mode, int, flag) {
+  /* Inside SYSCALL_DEFINE3(do_faccessat, ...) */
+  /* Add at the top of the function: */
 <code class="diff-add">
-+     if (nexussu_stealth_check(filename)) return -ENOENT;
++ if (nexussu_stealth_check(filename)) return -ENOENT;
 </code>
-  }
+
+  /* Inside SYSCALL_DEFINE4(faccessat2, ...) */
+  /* Add at the top of the function: */
+<code class="diff-add">
++ if (nexussu_stealth_check(filename)) return -ENOENT;
+</code>
+            </code></pre>
+        </div>
+        <div class="code-window">
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="file-badge">fs/stat.c</span>
+                    <span class="search-badge">🔍 Search: int vfs_statx</span>
+                </div>
+            </div>
+            <pre><code class="language-c">
+  /* At the top of the file: */
+<code class="diff-add">
++ #include &lt;linux/nexussu.h&gt;
+</code>
+
+  /* Inside int vfs_statx(...) */
+  /* Add at the top of the function: */
+<code class="diff-add">
++ if (nexussu_stealth_check(filename)) return -ENOENT;
+</code>
             </code></pre>
         </div>
 
-        <h3>Step 5: Procfs Scrubbing (fs/read_write.c)</h3>
+        <h3>Step 6: Procfs Scrubbing</h3>
         <div class="code-window">
-            <div class="code-toolbar"><div class="code-info"><span class="file-badge">fs/read_write.c</span></div></div>
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="file-badge">fs/read_write.c</span>
+                    <span class="search-badge">🔍 Search: rw_verify_area(READ</span>
+                </div>
+            </div>
             <pre><code class="language-c">
-  retval = rw_verify_area(READ, file, pos, count);
+  /* At the top of the file: */
 <code class="diff-add">
++ #include &lt;linux/nexussu.h&gt;
++ #include &lt;linux/string.h&gt;
+</code>
+
+  /* Locate: retval = rw_verify_area(READ, file, pos, count); */
+  /* Replace it with: */
+<code class="diff-add">
++ retval = rw_verify_area(READ, file, pos, count); 
 + if (retval > 0 && file && file->f_path.dentry && 
 +     (strstr(file->f_path.dentry->d_iname, "mount") != NULL || 
 +      strstr(file->f_path.dentry->d_iname, "maps") != NULL)) {
@@ -120,43 +234,74 @@
             </code></pre>
         </div>
 
-        <h3>Step 6: Dynamic SELinux Bypass (security/selinux/avc.c)</h3>
+        <h3>Step 7: Dynamic SELinux Bypass</h3>
         <div class="code-window">
-            <div class="code-toolbar"><div class="code-info"><span class="file-badge">security/selinux/avc.c</span></div></div>
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="file-badge">security/selinux/avc.c</span>
+                    <span class="search-badge">🔍 Search: avc_has_perm & avc_has_extended_perms</span>
+                </div>
+            </div>
             <pre><code class="language-c">
-  int avc_has_perm(u32 ssid, u32 tsid, u16 tclass, u32 requested, struct common_audit_data *auditdata) {
+  /* At the top of the file: */
 <code class="diff-add">
-+     if (current->nexussu_granted) return 0;
++ #include &lt;linux/sched.h&gt;
 </code>
-  }
 
-  int avc_has_extended_perms(u32 ssid, u32 tsid, u16 tclass, u32 requested, u8 driver, u8 perm, struct common_audit_data *ad) {
+  /* Inside int avc_has_perm(...) */
+  /* Add at the top of the function: */
 <code class="diff-add">
-+     if (current->nexussu_granted) return 0; 
++ if (current->nexussu_granted) return 0;
 </code>
-  }
+
+  /* Inside int avc_has_extended_perms(...) */
+  /* Add at the top of the function: */
+<code class="diff-add">
++ if (current->nexussu_granted) return 0; 
+</code>
             </code></pre>
         </div>
 
-        <h3>Step 7: Context Spoof & Enforce Stealth (security/selinux/hooks.c & selinuxfs.c)</h3>
+        <h3>Step 8: SELinux Context Spoof</h3>
         <div class="code-window">
-            <div class="code-toolbar"><div class="code-info"><span class="file-badge">security/selinux/hooks.c</span></div></div>
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="file-badge">security/selinux/hooks.c</span>
+                    <span class="search-badge">🔍 Search: selinux_getprocattr</span>
+                </div>
+            </div>
             <pre><code class="language-c">
-  static int selinux_getprocattr(struct task_struct *p, char *name, char **value) {
+  /* At the top of the file: */
 <code class="diff-add">
-+     if (p->nexussu_granted && strcmp(name, "current") == 0) {
-+         *value = kstrdup("u:r:su:s0", GFP_KERNEL);
-+         if (*value == NULL) return -ENOMEM;
-+         return strlen("u:r:su:s0");
-+     }
++ #include &lt;linux/sched.h&gt;
++ #include &lt;linux/slab.h&gt;
++ #include &lt;linux/string.h&gt;
 </code>
-  }
+
+  /* Inside static int selinux_getprocattr(...) */
+  /* Add at the top of the function: */
+<code class="diff-add">
++ if (p->nexussu_granted && strcmp(name, "current") == 0) {
++     *value = kstrdup("u:r:su:s0", GFP_KERNEL);
++     if (*value == NULL) return -ENOMEM;
++     return strlen("u:r:su:s0");
++ }
+</code>
             </code></pre>
         </div>
+
+        <h3>Step 9: SELinux Enforce Stealth</h3>
         <div class="code-window">
-            <div class="code-toolbar"><div class="code-info"><span class="file-badge">security/selinux/selinuxfs.c</span></div></div>
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="file-badge">security/selinux/selinuxfs.c</span>
+                    <span class="search-badge">🔍 Search: sel_read_enforce</span>
+                </div>
+            </div>
             <pre><code class="language-c">
-  // Inside sel_read_enforce
+  /* Inside sel_read_enforce */
+  /* Locate: length = scnprintf(tmpbuf, TMPBUFLEN, "%d", enforcing_enabled); */
+  /* Replace it with: */
 <code class="diff-add">
 + length = scnprintf(tmpbuf, TMPBUFLEN, "%d", 1); // Always report Enforcing
 </code>
