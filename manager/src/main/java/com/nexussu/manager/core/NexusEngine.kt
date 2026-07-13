@@ -14,32 +14,49 @@ object NexusEngine {
         try { System.loadLibrary("nexus_bridge") } catch (e: UnsatisfiedLinkError) {}
     }
 
+    external fun registerManager(): Boolean
     external fun grantUidAccess(uid: Int): Boolean
-    external fun revokeUidAccess(uid: Int): Boolean // NEW
+    external fun revokeUidAccess(uid: Int): Boolean
     external fun getEngineVersion(): Int
     external fun escalateSelf(): Boolean
 
-    fun isKernelActive(): Boolean = getEngineVersion() == 100
+    fun isKernelActive(): Boolean {
+        if (getEngineVersion() != 100) return false
+        return registerManager()
+    }
 
     fun installSuBinary(context: Context): Boolean {
-        if (!escalateSelf()) return false
         try {
+            if (!escalateSelf()) return false
+
             val suAsset = context.assets.open("su.bin")
             val suFile = File(context.filesDir, "su")
             FileOutputStream(suFile).use { output -> suAsset.copyTo(output) }
             suFile.setExecutable(true, false)
-            val cmd = "mount -o rw,remount /system && cp ${suFile.absolutePath} /system/bin/su && chmod 0755 /system/bin/su && mount -o ro,remount /system"
-            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd))
+
+            val commands = arrayOf(
+                "sh", "-c",
+                "mkdir -p /data/adb/nexussu/bin && " +
+                "cp ${suFile.absolutePath} /data/adb/nexussu/bin/su && " +
+                "chmod 0755 /data/adb/nexussu/bin/su && " +
+                "mount --bind /data/adb/nexussu/bin/su /system/bin/su"
+            )
+            
+            val process = Runtime.getRuntime().exec(commands)
             process.waitFor()
+            
             if (process.exitValue() == 0) {
-                grantUidAccess(android.os.Process.myUid()) // Grant manager root
+                Log.i(TAG, "Real su binary successfully bind-mounted to /system/bin/su")
+                grantUidAccess(android.os.Process.myUid())
                 return true
             }
-        } catch (e: Exception) {}
-        return false
+            return false
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to install su binary: ${e.message}")
+            return false
+        }
     }
 
-    // REAL PERSISTENCE: Re-apply saved UIDs on boot
     fun applySavedRootGrants() {
         val uids = RootShell.execute("cat $CONFIG_PATH")
         uids.split("\n").forEach { uidStr ->
@@ -77,7 +94,6 @@ object NexusEngine {
         return RootShell.executeBoolean("umount /system/etc/hosts")
     }
 
-    // REAL MODULES: Read installed modules from the filesystem
     fun getInstalledModules(): List<ModuleItem> {
         val modules = mutableListOf<ModuleItem>()
         val result = RootShell.execute("ls /data/adb/nexussu/modules")
