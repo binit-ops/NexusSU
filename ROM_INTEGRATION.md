@@ -28,8 +28,8 @@ on early-init
     # 2. Mount Systemless Hosts (if enabled by user)
     mount --bind /data/adb/nexussu/hosts /system/etc/hosts
 
-    # 3. Mount all active modules
-    exec - root root -- /system/bin/sh -c "find /data/adb/nexussu/modules/*/system -type f | while read file; do target=$(echo $file | sed 's|/data/adb/nexussu/modules/[^/]*/system|/system|'); mount --bind $file $target; done"
+    # 3. Mount all active modules (SKIP IF SAFE MODE IS ACTIVE)
+    exec - root root -- /system/bin/sh -c "if [ ! -f /data/adb/nexussu/safemode ]; then find /data/adb/nexussu/modules/*/system -type f | while read file; do target=$(echo $file | sed 's|/data/adb/nexussu/modules/[^/]*/system|/system|'); mount --bind $file $target; done; fi"
 
 # Run the boot daemon to re-apply root grants before Android starts
 on property:sys.boot_completed=1
