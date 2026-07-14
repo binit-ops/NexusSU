@@ -20,8 +20,6 @@ object NexusEngine {
     external fun revokeUidAccess(uid: Int): Boolean
     external fun getEngineVersion(): Int
     external fun escalateSelf(): Boolean
-    
-    // NEW: Denylist JNI Functions
     external fun addDenyUid(uid: Int): Boolean
     external fun removeDenyUid(uid: Int): Boolean
 
@@ -64,6 +62,27 @@ object NexusEngine {
             return false
         } catch (e: Exception) {
             Log.e(TAG, "Failed to install su binary: ${e.message}")
+            return false
+        }
+    }
+
+    // NEW: Install BusyBox
+    fun installBusyBox(context: Context): Boolean {
+        try {
+            val bbAsset = context.assets.open("busybox.bin")
+            val bbFile = File(context.filesDir, "busybox")
+            FileOutputStream(bbFile).use { output -> bbAsset.copyTo(output) }
+            bbFile.setExecutable(true, false)
+
+            val cmd = "sh -c \"cp ${bbFile.absolutePath} /data/adb/nexussu/bin/busybox && " +
+                      "chmod 0755 /data/adb/nexussu/bin/busybox && " +
+                      "mount --bind /data/adb/nexussu/bin/busybox /system/bin/busybox\""
+            
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+            process.waitFor()
+            return process.exitValue() == 0
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to install busybox: ${e.message}")
             return false
         }
     }
@@ -117,7 +136,6 @@ object NexusEngine {
     }
 
     // --- Denylist (Exclude Modifications) ---
-    // NEW: Real denylist logic
     fun saveDeniedUid(uid: Int) {
         addDenyUid(uid)
         RootShell.execute("echo $uid >> $DENYLIST_PATH")
