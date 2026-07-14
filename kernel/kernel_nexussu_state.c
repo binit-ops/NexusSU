@@ -46,7 +46,7 @@ void nexussu_revoke_trusted_uid(uid_t uid) {
     spin_unlock_irqrestore(&nexussu_lock, flags);
 }
 
-// NEW: Denylist Logic
+// Denylist Logic
 bool nexussu_is_denied(kuid_t kuid) {
     int i; uid_t uid = kuid.val; unsigned long flags; bool found = false;
     spin_lock_irqsave(&nexussu_lock, flags);
@@ -77,6 +77,7 @@ void nexussu_remove_deny_uid(uid_t uid) {
     spin_unlock_irqrestore(&nexussu_lock, flags);
 }
 
+/* VFS Stealth Check: Used by faccessat and statx to hide root artifacts */
 bool nexussu_stealth_check(const char __user *filename) {
     char buf[256];
     if (!filename) return false;
@@ -87,6 +88,29 @@ bool nexussu_stealth_check(const char __user *filename) {
     return false;
 }
 
+/* 
+ * Directory Stealth Check: Used by filldir in fs/readdir.c
+ * Hides the 'nexussu' and 'magisk' folders in /data/adb/ from other apps.
+ */
+bool nexussu_hide_dir_check(const char *name, int namlen) {
+    if (!name) return false;
+    
+    // If the caller is the Manager App, do NOT hide the folders.
+    if (nexussu_is_manager(current_uid().val)) {
+        return false;
+    }
+    
+    // If the caller is any other app, hide these folder names.
+    if (namlen == 7 && strncmp(name, "nexussu", 7) == 0) return true;
+    if (namlen == 6 && strncmp(name, "magisk", 6) == 0) return true;
+    
+    return false;
+}
+
+/* 
+ * Professional Procfs Scrubber.
+ * Actively overwrites root artifacts in /proc/mounts and /proc/self/maps
+ */
 void nexussu_scrub_proc_buffer(struct file *file, char __user *buf, size_t count, ssize_t *ret) {
     char *kbuf; ssize_t read_bytes = *ret; bool modified = false; char *ptr;
     if (read_bytes <= 0 || !buf || !file) return;
