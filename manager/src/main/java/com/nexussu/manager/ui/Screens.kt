@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Divider
 import androidx.compose.material3.OutlinedButton
@@ -76,12 +77,10 @@ fun HomeScreen(onOpenAdvanced: () -> Unit) {
     val p = LocalNexusPalette.current
     val scope = rememberCoroutineScope()
     
-    // Stats states
     var grantedCount by remember { mutableStateOf(0) }
     var moduleCount by remember { mutableStateOf(0) }
     var isRootActive by remember { mutableStateOf(false) }
 
-    // Fetch real stats in background
     LaunchedEffect(Unit) {
         scope.launch(Dispatchers.IO) {
             isRootActive = NexusEngine.isKernelActive()
@@ -94,10 +93,8 @@ fun HomeScreen(onOpenAdvanced: () -> Unit) {
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Column(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            // Pass isRootActive to the lens
             RootLens(isActive = isRootActive)
             Spacer(Modifier.height(12.dp))
-            // Display real stats
             Text("$grantedCount apps granted · $moduleCount modules active", color = p.dim, fontSize = 11.sp, fontFamily = MonoFont)
         }
         DeviceCard(onOpenAdvanced = onOpenAdvanced)
@@ -117,7 +114,7 @@ fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
     var kernelVersion by remember { mutableStateOf("Loading...") }
     var selinuxStatus by remember { mutableStateOf("Loading...") }
     var verifiedBootState by remember { mutableStateOf("Loading...") }
-    var busyboxStatus by remember { mutableStateOf("Loading...") } // NEW
+    var busyboxStatus by remember { mutableStateOf("Loading...") }
     var isRootAvailable by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -126,7 +123,6 @@ fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
             kernelVersion = RootShell.getKernelVersion()
             selinuxStatus = RootShell.getSelinuxStatus()
             verifiedBootState = RootShell.getVerifiedBootState()
-            // NEW: Check if busybox is mounted
             busyboxStatus = if (RootShell.execute("mount | grep busybox").isNotBlank()) "Active (v1.0.0)" else "Inactive"
         } else {
             kernelVersion = "Root not available"
@@ -153,7 +149,7 @@ fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
                     KeyValueRow("SUSFS", if (isRootAvailable) "Active" else "Unavailable")
                     KeyValueRow("SELinux", selinuxStatus)
                     KeyValueRow("Verified boot", verifiedBootState)
-                    KeyValueRow("BusyBox", busyboxStatus) // NEW
+                    KeyValueRow("BusyBox", busyboxStatus)
                     TextButton(onClick = onOpenAdvanced, contentPadding = PaddingValues(vertical = 8.dp)) {
                         Text("Advanced options →", color = p.accent, fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
                     }
@@ -198,7 +194,7 @@ fun SuperuserScreen() {
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             val grantedUids = NexusEngine.getGrantedUids()
-            val deniedUids = NexusEngine.getDeniedUids() // Fetch Denylist
+            val deniedUids = NexusEngine.getDeniedUids()
             val pm = context.packageManager
             val flags = PackageManager.ApplicationInfoFlags.of(PackageManager.GET_META_DATA.toLong())
             val installed = pm.getInstalledApplications(flags)
@@ -211,7 +207,7 @@ fun SuperuserScreen() {
                 GrantedApp(
                     packageName = info.packageName, name = name, uid = info.uid,
                     icon = pm.getApplicationIcon(info), isSystem = isSystem,
-                    excludeMod = deniedUids.contains(info.uid), // Set initial toggle state
+                    excludeMod = deniedUids.contains(info.uid),
                     toggledOn = grantedUids.contains(info.uid)
                 )
             }.sortedBy { it.name.lowercase() }
@@ -263,7 +259,6 @@ fun SuperuserScreen() {
                             val idx = apps.indexOf(app)
                             if (idx >= 0) apps[idx] = app.copy(excludeMod = checked)
                             scope.launch(Dispatchers.IO) {
-                                // Wire exclude toggle to Denylist backend
                                 if (checked) NexusEngine.saveDeniedUid(app.uid) else NexusEngine.removeDeniedUid(app.uid)
                             }
                         })
@@ -312,14 +307,12 @@ fun LogScreen() {
     val logs = remember { mutableStateListOf<String>() }
     val listState = rememberLazyListState()
 
-    // Start streaming logs in real-time
     DisposableEffect(Unit) {
         var process: Process? = null
         var reader: java.io.BufferedReader? = null
         
         scope.launch(Dispatchers.IO) {
             try {
-                // Create the file if it doesn't exist, then start tailing
                 val cmd = "touch /data/adb/nexussu/logs.txt && tail -n 20 -f /data/adb/nexussu/logs.txt"
                 process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
                 reader = java.io.BufferedReader(java.io.InputStreamReader(process!!.inputStream))
@@ -330,8 +323,7 @@ fun LogScreen() {
                     if (currentLine != null) {
                         withContext(Dispatchers.Main) {
                             logs.add(currentLine)
-                            if (logs.size > 200) logs.removeAt(0) // Prevent memory leak
-                            // Auto-scroll to bottom
+                            if (logs.size > 200) logs.removeAt(0)
                             scope.launch { listState.animateScrollToItem(logs.size - 1) }
                         }
                     }
@@ -343,7 +335,6 @@ fun LogScreen() {
             }
         }
 
-        // Cleanup when leaving the screen
         onDispose {
             process?.destroy()
         }
@@ -352,15 +343,11 @@ fun LogScreen() {
     Column(Modifier.fillMaxSize()) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
             Text("Root Access Logs", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            
-            // Clear Logs Button
             Box(
                 Modifier.clip(CircleShape).background(p.glassFill).clickable(remember { MutableInteractionSource() }, indication = null) {
                     scope.launch(Dispatchers.IO) {
                         RootShell.execute("rm -f /data/adb/nexussu/logs.txt")
-                        withContext(Dispatchers.Main) {
-                            logs.clear()
-                        }
+                        withContext(Dispatchers.Main) { logs.clear() }
                     }
                 }.padding(8.dp)
             ) {
@@ -369,10 +356,8 @@ fun LogScreen() {
         }
         
         GlassCard(modifier = Modifier.fillMaxSize()) {
-            if (logs.isEmpty() && logs.isNotEmpty()) { // Loading state workaround
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { 
-                    Text("Waiting for root requests...", color = p.dim, fontSize = 13.sp, fontFamily = MonoFont) 
-                }
+            if (logs.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Waiting for root requests...", color = p.dim, fontSize = 13.sp, fontFamily = MonoFont) }
             } else {
                 LazyColumn(
                     state = listState,
@@ -380,12 +365,7 @@ fun LogScreen() {
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     items(logs) { logLine ->
-                        Text(
-                            text = logLine,
-                            color = p.accent, // Green terminal text
-                            fontSize = 12.sp,
-                            fontFamily = MonoFont
-                        )
+                        Text(text = logLine, color = p.accent, fontSize = 12.sp, fontFamily = MonoFont)
                     }
                 }
             }
@@ -393,7 +373,126 @@ fun LogScreen() {
     }
 }
 
-        // ---------- Settings ----------
+// ---------- Module ----------
+data class ModuleItem(val id: String, val initial: String, val name: String, val desc: String, val enabled: Boolean)
+
+@Composable
+fun ModuleScreen() {
+    val p = LocalNexusPalette.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val modules = remember { mutableStateListOf<ModuleItem>() }
+    var isInstalling by remember { mutableStateOf(false) }
+    var showInstallLog by remember { mutableStateOf(false) }
+    var installLogContent by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            val installed = NexusEngine.getInstalledModules()
+            withContext(Dispatchers.Main) {
+                modules.clear(); modules.addAll(installed)
+            }
+        }
+    }
+
+    val zipPickerLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) {
+            isInstalling = true
+            val cacheFile = File(context.cacheDir, "module.zip")
+            context.contentResolver.openInputStream(uri)?.use { input -> cacheFile.outputStream().use { output -> input.copyTo(output) } }
+            
+            Thread {
+                val success = RootShell.installModule(cacheFile.absolutePath)
+                cacheFile.delete()
+                Handler(Looper.getMainLooper()).post {
+                    isInstalling = false
+                    if (success) {
+                        Toast.makeText(context, "Module installed!", Toast.LENGTH_SHORT).show()
+                        modules.clear(); modules.addAll(NexusEngine.getInstalledModules())
+                    } else {
+                        Toast.makeText(context, "Installation failed. Check log.", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }.start()
+        }
+    }
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text("Modules", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        if (isInstalling) {
+            GlassCard { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { Text("Installing module...", color = p.accent, fontSize = 13.sp, fontFamily = MonoFont) } }
+        } else if (modules.isEmpty()) {
+            GlassCard { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { Text("No modules installed", color = p.dim, fontSize = 13.sp, fontFamily = MonoFont) } }
+        } else {
+            GlassCard {
+                Column {
+                    modules.forEachIndexed { i, m ->
+                        Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(Brush.linearGradient(listOf(p.accent, p.accent2))), contentAlignment = Alignment.Center) { Text(m.initial, color = Color(0xFF0A0E14), fontWeight = FontWeight.SemiBold) }
+                            Column(Modifier.weight(1f)) {
+                                Text(m.name, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
+                                Text(m.desc, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
+                            }
+                            Text(
+                                text = "Uninstall",
+                                color = p.dim,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.clickable(remember { MutableInteractionSource() }, indication = null) {
+                                    scope.launch(Dispatchers.IO) {
+                                        NexusEngine.deleteModule(m.id)
+                                        modules.clear(); modules.addAll(NexusEngine.getInstalledModules())
+                                    }
+                                }.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                            GlassToggle(m.enabled, onCheckedChange = { checked ->
+                                modules[i] = m.copy(enabled = checked)
+                                scope.launch(Dispatchers.IO) { NexusEngine.setModuleEnabled(m.id, checked) }
+                            })
+                        }
+                        if (i < modules.lastIndex) Divider(color = p.glassEdge, thickness = 0.5.dp)
+                    }
+                }
+            }
+        }
+
+        OutlinedButton(
+            onClick = { 
+                scope.launch(Dispatchers.IO) {
+                    installLogContent = NexusEngine.getInstallLog()
+                    showInstallLog = true
+                }
+            },
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = p.dim),
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("View Installation Log") }
+
+        OutlinedButton(onClick = { zipPickerLauncher.launch("application/zip") }, enabled = !isInstalling, colors = ButtonDefaults.outlinedButtonColors(contentColor = p.dim), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) { Text(if (isInstalling) "Installing..." else "+ Install module") }
+    }
+
+    if (showInstallLog) {
+        AlertDialog(
+            onDismissRequest = { showInstallLog = false },
+            confirmButton = { TextButton(onClick = { showInstallLog = false }) { Text("Close", color = p.accent) } },
+            title = { Text("Installation Log", color = p.ink) },
+            text = { 
+                Text(
+                    text = installLogContent, 
+                    color = p.accent, 
+                    fontSize = 10.sp, 
+                    fontFamily = MonoFont,
+                    modifier = Modifier.verticalScroll(rememberScrollState())
+                ) 
+            },
+            containerColor = p.void,
+            titleContentColor = p.ink,
+            textContentColor = p.accent
+        )
+    }
+}
+
+// ---------- Settings ----------
 @Composable
 fun SettingsScreen(
     darkTheme: Boolean, onDarkThemeChange: (Boolean) -> Unit,
