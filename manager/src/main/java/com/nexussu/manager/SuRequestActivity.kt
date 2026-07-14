@@ -1,12 +1,39 @@
 package com.nexussu.manager
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import androidx.activity.compose.setContent
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.nexussu.manager.core.NexusEngine
+import com.nexussu.manager.ui.AccentTheme
+import com.nexussu.manager.ui.LocalNexusPalette
+import com.nexussu.manager.ui.MonoFont
+import com.nexussu.manager.ui.NexusSUTheme
 import java.io.File
 
 class SuRequestActivity : Activity() {
@@ -23,8 +50,8 @@ class SuRequestActivity : Activity() {
             finish()
             return
         }
-        
-        // Look up app name from UID
+
+        // Look up app name and icon from UID
         val pm = packageManager
         val packageName = pm.getNameForUid(callerUid)?.split(":")?.firstOrNull() ?: "Unknown"
         val appName = try {
@@ -34,27 +61,34 @@ class SuRequestActivity : Activity() {
             "UID: $callerUid"
         }
         
-        AlertDialog.Builder(this)
-            .setTitle("Superuser Request")
-            .setMessage("$appName is requesting superuser access.")
-            .setPositiveButton("Grant") { _, _ ->
-                Thread {
-                    // Grant root via prctl and persist to file
-                    NexusEngine.saveGrantedUid(callerUid)
-                    // Signal the su binary to proceed by writing the exact PIN
-                    createResponseFile(pin)
-                    Handler(Looper.getMainLooper()).post { finish() }
-                }.start()
+        val appIcon: Bitmap? = try {
+            val drawable = pm.getApplicationIcon(packageName)
+            if (drawable is BitmapDrawable) drawable.bitmap else null
+        } catch (e: Exception) {
+            null
+        }
+
+        setContent {
+            NexusSUTheme(darkTheme = true, accentTheme = AccentTheme.Nexus) {
+                SuRequestDialog(
+                    appName = appName,
+                    appIcon = appIcon,
+                    onGrant = {
+                        Thread {
+                            NexusEngine.saveGrantedUid(callerUid)
+                            createResponseFile(pin)
+                            Handler(Looper.getMainLooper()).post { finish() }
+                        }.start()
+                    },
+                    onDeny = {
+                        Thread {
+                            createResponseFile("0")
+                            Handler(Looper.getMainLooper()).post { finish() }
+                        }.start()
+                    }
+                )
             }
-            .setNegativeButton("Deny") { _, _ ->
-                Thread {
-                    // Just signal the su binary with an invalid PIN so it denies
-                    createResponseFile("0")
-                    Handler(Looper.getMainLooper()).post { finish() }
-                }.start()
-            }
-            .setCancelable(false)
-            .show()
+        }
     }
     
     private fun createResponseFile(pin: String) {
@@ -64,6 +98,92 @@ class SuRequestActivity : Activity() {
             file.setReadable(true, false)
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+}
+
+@Composable
+fun SuRequestDialog(
+    appName: String,
+    appIcon: Bitmap?,
+    onGrant: () -> Unit,
+    onDeny: () -> Unit
+) {
+    val p = LocalNexusPalette.current
+    var timeLeft by remember { mutableStateOf(10) } // 10-second timeout
+
+    // Countdown timer
+    LaunchedEffect(Unit) {
+        while (timeLeft > 0) {
+            kotlinx.coroutines.delay(1000)
+            timeLeft--
+        }
+        if (timeLeft == 0) onDeny()
+    }
+
+    Box(
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(32.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(Brush.verticalGradient(listOf(p.void, p.voidGradientEnd)))
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // App Icon
+            if (appIcon != null) {
+                Image(
+                    bitmap = appIcon.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier.size(64.dp).clip(RoundedCornerShape(16.dp))
+                )
+            } else {
+                Box(
+                    Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)).background(p.glassFill),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(appName.firstOrNull()?.uppercase() ?: "U", color = p.ink, fontWeight = FontWeight.Bold, fontSize = 24.sp)
+                }
+            }
+            
+            Spacer(Modifier.height(16.dp))
+            
+            Text("Superuser Request", color = p.dim, fontSize = 12.sp, fontFamily = MonoFont)
+            Spacer(Modifier.height(4.dp))
+            Text(appName, color = p.ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            
+            Spacer(Modifier.height(8.dp))
+            Text("is requesting root access.", color = p.dim, fontSize = 13.sp)
+            
+            Spacer(Modifier.height(24.dp))
+            
+            // Grant Button
+            Button(
+                onClick = { onGrant() },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = p.accent, contentColor = Color(0xFF0A0E14))
+            ) {
+                Text("Grant", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 4.dp))
+            }
+            
+            Spacer(Modifier.height(8.dp))
+            
+            // Deny Button
+            OutlinedButton(
+                onClick = { onDeny() },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = p.dim)
+            ) {
+                Text("Deny", fontWeight = FontWeight.Medium, modifier = Modifier.padding(vertical = 4.dp))
+            }
+            
+            Spacer(Modifier.height(12.dp))
+            Text("Auto-denying in $timeLeft seconds...", color = p.dim.copy(alpha = 0.5f), fontSize = 10.sp, fontFamily = MonoFont)
         }
     }
 }
