@@ -195,3 +195,8 @@ object NexusEngine {
         return RootShell.deleteModule(id)
     }
 }
+
+// NEW: Fetch installation log
+    fun getInstallLog(): String {
+        return RootShell.execute("cat /data/adb/nexussu/install.log 2>/dev/null || echo 'No log found.'")
+    }
