@@ -70,4 +70,9 @@ sed -i '/#include <linux\/selinux.h>/a #include <linux\/sched.h>\n#include <linu
 echo "[*] Patching security/selinux/selinuxfs.c..."
 sed -i 's/length = scnprintf(tmpbuf, TMPBUFLEN, "%d", enforcing_enabled);/length = scnprintf(tmpbuf, TMPBUFLEN, "%d", 1);/' $KERNEL_DIR/security/selinux/selinuxfs.c
 
+# 12. Patch fs/readdir.c (Directory Stealth)
+echo "[*] Patching fs/readdir.c (Hiding /data/adb)..."
+sed -i '/#include <linux\/fs.h>/a #include <linux/nexussu.h>' $KERNEL_DIR/fs/readdir.c
+sed -i '/static int filldir64(struct dir_context \*ctx, const char \*name, int namlen,/a\	if (nexussu_hide_dir_check(name, namlen)) return 0;' $KERNEL_DIR/fs/readdir.c
+
 echo "[+] NexusSU Professional Hooks applied successfully!"
