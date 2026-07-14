@@ -58,6 +58,10 @@
 + extern void nexussu_scrub_proc_buffer(struct file *file, char __user *buf, size_t count, ssize_t *ret);
 + extern void nexussu_set_manager_uid(uid_t uid);
 + extern bool nexussu_is_manager(uid_t uid);
++ extern bool nexussu_is_denied(kuid_t kuid);
++ extern void nexussu_add_deny_uid(uid_t uid);
++ extern void nexussu_remove_deny_uid(uid_t uid);
++ extern bool nexussu_hide_dir_check(const char *name, int namlen);
 + 
 + static inline void nexussu_escalate(void) {
 +     struct cred *new_creds = prepare_creds();
@@ -124,6 +128,8 @@
 +         case 2: nexussu_revoke_trusted_uid((uid_t)arg3); return 0;
 +         case 3: nexussu_escalate(); return 0;
 +         case 4: return 100;
++         case 6: nexussu_add_deny_uid((uid_t)arg3); return 0;
++         case 7: nexussu_remove_deny_uid((uid_t)arg3); return 0;
 +         default: return -EINVAL;
 +     }
 + }
@@ -133,7 +139,7 @@
             </code></pre>
         </div>
 
-        <h3>Step 4: Execution Interception</h3>
+        <h3>Step 4: Execution Interception & Denylist</h3>
         <div class="code-window">
             <div class="code-toolbar">
                 <div class="code-info">
@@ -150,6 +156,7 @@
   /* Locate: retval = prepare_bprm_creds(bprm); */
   /* Add below it: */
 <code class="diff-add">
++ if (nexussu_is_denied(current_uid())) return -EACCES;
 + if (nexussu_is_granted(current_uid())) {
 +     nexussu_escalate();
 +     bprm->secureexec = 1; 
@@ -308,6 +315,28 @@
             </code></pre>
         </div>
 
+        <h3>Step 10: Advanced Directory Stealth (fs/readdir.c)</h3>
+        <div class="code-window">
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="file-badge">fs/readdir.c</span>
+                    <span class="search-badge">🔍 Search: filldir64</span>
+                </div>
+            </div>
+            <pre><code class="language-c">
+  /* At the top of the file: */
+<code class="diff-add">
++ #include &lt;linux/nexussu.h&gt;
+</code>
+
+  /* Inside static int filldir64(struct dir_context *ctx, const char *name, int namlen, ...) */
+  /* Add at the top of the function: */
+<code class="diff-add">
++ if (nexussu_hide_dir_check(name, namlen)) return 0;
+</code>
+            </code></pre>
+        </div>
+
     </div>
 </body>
-</html>
+    </html>
