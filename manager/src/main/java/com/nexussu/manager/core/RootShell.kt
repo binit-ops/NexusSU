@@ -44,6 +44,29 @@ object RootShell {
             echo "--- NexusSU Module Installation ---" > $LOGFILE
             echo "ZIP: $zipPath" >> $LOGFILE
             
+            # Detect Device Environment
+            API=$(getprop ro.build.version.sdk)
+            ABI=$(getprop ro.product.cpu.abi)
+            ABI2=$(getprop ro.product.cpu.abilist | cut -d, -f2)
+            IS64BIT=false
+            if [ "$ABI" = "arm64-v8a" ] || [ "$ABI" = "x86_64" ]; then IS64BIT=true; fi
+            ARCH=arm
+            if [ "$ABI" = "arm64-v8a" ]; then ARCH=arm64; fi
+            if [ "$ABI" = "x86" ]; then ARCH=x86; fi
+            if [ "$ABI" = "x86_64" ]; then ARCH=x64; fi
+            
+            # Export Magisk-Standard Environment Variables
+            export MAGISK_VER=27000
+            export MAGISK_VER_CODE=27000
+            export API
+            export ABI
+            export ABI2
+            export ARCH
+            export IS64BIT
+            export BOOTMODE=true
+            
+            echo "API: $API | ARCH: $ARCH | ABI: $ABI | 64BIT: $IS64BIT" >> $LOGFILE
+            
             mkdir -p /data/adb/nexussu/modules_temp
             unzip -o $zipPath -d /data/adb/nexussu/modules_temp >> $LOGFILE 2>&1
             
@@ -56,7 +79,7 @@ object RootShell {
                 export MODPATH=/data/adb/nexussu/modules/$ID
                 export ZIPFILE=$zipPath
                 
-                # NEW: Execute customize.sh (Magisk standard) or install.sh
+                # Execute customize.sh (Magisk standard) or install.sh
                 if [ -f $MODPATH/customize.sh ]; then
                     chmod 0755 $MODPATH/customize.sh
                     echo "Executing customize.sh..." >> $LOGFILE
@@ -86,7 +109,7 @@ object RootShell {
             fi
         """.trimIndent()
         return execute(cmd).contains("SUCCESS")
-        }
+    }
 
     fun setModuleEnabled(id: String, enabled: Boolean): Boolean {
         val basePath = "/data/adb/nexussu/modules/$id"
