@@ -116,6 +116,7 @@ fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
 
     var kernelVersion by remember { mutableStateOf("Loading...") }
     var selinuxStatus by remember { mutableStateOf("Loading...") }
+    var verifiedBootState by remember { mutableStateOf("Loading...") } // NEW
     var isRootAvailable by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -123,9 +124,11 @@ fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
         if (isRootAvailable) {
             kernelVersion = RootShell.getKernelVersion()
             selinuxStatus = RootShell.getSelinuxStatus()
+            verifiedBootState = RootShell.getVerifiedBootState() // NEW
         } else {
             kernelVersion = "Root not available"
             selinuxStatus = "Root not available"
+            verifiedBootState = "Root not available" // NEW
         }
     }
 
@@ -145,6 +148,8 @@ fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
                     KeyValueRow("Kernel", kernelVersion)
                     KeyValueRow("SUSFS", if (isRootAvailable) "Active" else "Unavailable")
                     KeyValueRow("SELinux", selinuxStatus)
+                    // NEW: Real Verified Boot Status
+                    KeyValueRow("Verified boot", verifiedBootState)
                     TextButton(onClick = onOpenAdvanced, contentPadding = PaddingValues(vertical = 8.dp)) {
                         Text("Advanced options →", color = p.accent, fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
                     }
