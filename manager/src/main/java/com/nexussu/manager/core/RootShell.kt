@@ -38,7 +38,7 @@ object RootShell {
         }
     }
     
-    fun installModule(zipPath: String): Boolean {
+        fun installModule(zipPath: String): Boolean {
         val cmd = """
             mkdir -p /data/adb/nexussu/modules_temp
             unzip -o $zipPath -d /data/adb/nexussu/modules_temp
@@ -47,6 +47,17 @@ object RootShell {
                 mkdir -p /data/adb/nexussu/modules/$ID
                 cp -r /data/adb/nexussu/modules_temp/* /data/adb/nexussu/modules/$ID/
                 rm -rf /data/adb/nexussu/modules_temp
+                
+                # NEW: Execute install.sh if it exists
+                if [ -f /data/adb/nexussu/modules/$ID/install.sh ]; then
+                    chmod 0755 /data/adb/nexussu/modules/$ID/install.sh
+                    # Set up Magisk-style environment variables so the script knows where it is
+                    export MODPATH=/data/adb/nexussu/modules/$ID
+                    export ZIPFILE=$zipPath
+                    sh /data/adb/nexussu/modules/$ID/install.sh
+                fi
+                
+                # Mount the system files if installation was successful
                 if [ -d /data/adb/nexussu/modules/$ID/system ]; then
                     find /data/adb/nexussu/modules/$ID/system -type f | while read file; do
                         target_path="/system${'$'}{file#/data/adb/nexussu/modules/$ID/system}"
@@ -61,7 +72,7 @@ object RootShell {
             fi
         """.trimIndent()
         return execute(cmd).contains("SUCCESS")
-    }
+        }
 
     fun setModuleEnabled(id: String, enabled: Boolean): Boolean {
         val basePath = "/data/adb/nexussu/modules/$id"
