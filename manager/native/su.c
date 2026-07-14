@@ -5,9 +5,10 @@
 #include <time.h>
 #include <sys/types.h>
 #include <sys/syscall.h>
+#include <sys/wait.h>
 
 #define LOG_PATH "/data/adb/nexussu/logs.txt"
-#define RESPONSE_FILE "/data/local/tmp/.nexussu_response"
+#define RESPONSE_FILE_TEMPLATE "/data/local/tmp/.nexussu_response_%d"
 
 void log_access() {
     FILE *file = fopen(LOG_PATH, "a");
@@ -22,31 +23,40 @@ void log_access() {
 }
 
 int main(int argc, char *argv[]) {
-    // 1. Check if we already have root
     if (getuid() != 0) {
-        // 2. Check if we've already requested (prevents infinite loop)
         if (getenv("NEXUSSU_REQUESTED") != NULL) {
             fprintf(stderr, "su: root access denied.\n");
             return 1;
         }
 
-        // 3. Generate a secure random PIN (using getrandom syscall)
         unsigned int pin;
         syscall(SYS_getrandom, &pin, sizeof(pin), 0);
-        pin = pin % 900000 + 100000; // 6-digit PIN
+        pin = pin % 900000 + 100000;
 
-        // 4. Launch the request dialog in the Manager App with the PIN
+        // Unique response file based on PID to prevent concurrent collisions
+        pid_t pid = getpid();
+        char response_file[64];
+        sprintf(response_file, RESPONSE_FILE_TEMPLATE, pid);
+
+        // Hardened: Use absolute path and fork/exec to prevent PATH hijacking
         char am_cmd[512];
-        sprintf(am_cmd, "am start -n com.nexussu.manager/.SuRequestActivity --es caller_uid %d --es pin %d >/dev/null 2>&1", getuid(), pin);
-        system(am_cmd);
+        sprintf(am_cmd, "/system/bin/am start -n com.nexussu.manager/.SuRequestActivity --es caller_uid %d --es pin %d --es pid %d >/dev/null 2>&1", getuid(), pin, pid);
+        
+        pid_t am_pid = fork();
+        if (am_pid == 0) {
+            // Child process: execute am directly with secure PATH
+            setenv("PATH", "/system/bin:/system/xbin:/vendor/bin", 1);
+            execl("/system/bin/sh", "sh", "-c", am_cmd, NULL);
+            _exit(1);
+        }
 
-        // 5. Poll for response file containing the exact PIN (up to 30 seconds)
+        // Poll for unique response file containing the exact PIN (up to 30 seconds)
         char expected_response[32];
         sprintf(expected_response, "%d", pin);
         int granted = 0;
 
         for (int i = 0; i < 30; i++) {
-            FILE *f = fopen(RESPONSE_FILE, "r");
+            FILE *f = fopen(response_file, "r");
             if (f) {
                 char buf[32];
                 if (fgets(buf, sizeof(buf), f) != NULL) {
@@ -55,7 +65,7 @@ int main(int argc, char *argv[]) {
                     }
                 }
                 fclose(f);
-                remove(RESPONSE_FILE);
+                remove(response_file);
                 break;
             }
             sleep(1);
@@ -66,7 +76,6 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
-        // 6. Re-exec ourselves with the env var to prevent loops
         setenv("NEXUSSU_REQUESTED", "1", 1);
         execv("/system/bin/su", argv);
 
@@ -74,7 +83,6 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // We have root! Log the access and proceed.
     log_access();
 
     char *shell = "/system/bin/sh";
