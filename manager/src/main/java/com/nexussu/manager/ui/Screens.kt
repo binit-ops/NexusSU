@@ -191,10 +191,10 @@ fun SuperuserScreen() {
     var isLoading by remember { mutableStateOf(true) }
     var searchQuery by remember { mutableStateOf("") }
 
-        LaunchedEffect(Unit) {
+    LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             val grantedUids = NexusEngine.getGrantedUids()
-            val deniedUids = NexusEngine.getDeniedUids() // NEW
+            val deniedUids = NexusEngine.getDeniedUids() // Fetch Denylist
             val pm = context.packageManager
             val flags = PackageManager.ApplicationInfoFlags.of(PackageManager.GET_META_DATA.toLong())
             val installed = pm.getInstalledApplications(flags)
@@ -207,7 +207,7 @@ fun SuperuserScreen() {
                 GrantedApp(
                     packageName = info.packageName, name = name, uid = info.uid,
                     icon = pm.getApplicationIcon(info), isSystem = isSystem,
-                    excludeMod = deniedUids.contains(info.uid), // NEW
+                    excludeMod = deniedUids.contains(info.uid), // Set initial toggle state
                     toggledOn = grantedUids.contains(info.uid)
                 )
             }.sortedBy { it.name.lowercase() }
@@ -216,7 +216,7 @@ fun SuperuserScreen() {
                 apps.clear(); apps.addAll(appList); isLoading = false
             }
         }
-     }
+    }
 
     val filteredApps = apps.filter { it.isSystem == showSystem && it.name.contains(searchQuery, ignoreCase = true) }
 
@@ -249,7 +249,7 @@ fun SuperuserScreen() {
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {
                     itemsIndexed(filteredApps, key = { _, app -> app.packageName }) { index, app ->
-                                         AppRow(app = app, onToggleRoot = { checked -> 
+                        AppRow(app = app, onToggleRoot = { checked -> 
                             val idx = apps.indexOf(app)
                             if (idx >= 0) apps[idx] = app.copy(toggledOn = checked)
                             scope.launch(Dispatchers.IO) {
@@ -259,11 +259,18 @@ fun SuperuserScreen() {
                             val idx = apps.indexOf(app)
                             if (idx >= 0) apps[idx] = app.copy(excludeMod = checked)
                             scope.launch(Dispatchers.IO) {
-                                // NEW: Wire exclude toggle
+                                // Wire exclude toggle to Denylist backend
                                 if (checked) NexusEngine.saveDeniedUid(app.uid) else NexusEngine.removeDeniedUid(app.uid)
                             }
-                        })       
-                                                
+                        })
+                        if (index < filteredApps.lastIndex) Divider(color = p.glassEdge, thickness = 0.5.dp)
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun AppRow(app: GrantedApp, onToggleRoot: (Boolean) -> Unit, onToggleExclude: (Boolean) -> Unit) {
     val p = LocalNexusPalette.current
