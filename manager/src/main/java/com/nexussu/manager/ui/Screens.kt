@@ -534,6 +534,9 @@ fun SettingsScreen(
     var safeMode by remember { mutableStateOf(RootShell.execute("[ -f /data/adb/nexussu/safemode ] && echo 1 || echo 0").trim() == "1") }
     var adbRoot by remember { mutableStateOf(NexusEngine.isAdbRootEnabled()) }
     
+    // NEW: Temporary Root State
+    var tempRoot by remember { mutableStateOf(RootShell.execute("mount | grep '/system/bin/su'").isBlank()) }
+    
     var isCheckingUpdates by remember { mutableStateOf(false) }
     var updateUrl by remember { mutableStateOf<String?>(null) }
 
@@ -568,6 +571,14 @@ fun SettingsScreen(
         SectionLabel("Root Behavior")
         GlassCard {
             Column {
+                // NEW: Temporary Root Toggle
+                BehaviorToggle("Disable Root", "Temporarily unmount su and busybox", checked = tempRoot) { isChecked ->
+                    scope.launch(Dispatchers.IO) {
+                        val success = if (isChecked) NexusEngine.disableRoot() else NexusEngine.enableRoot()
+                        if (success) tempRoot = isChecked
+                    }
+                }
+                Divider(color = p.glassEdge, thickness = 0.5.dp)
                 BehaviorToggle("Allow ADB Root", "Grant root permissions to ADB Shell (UID 2000)", checked = adbRoot) { isChecked ->
                     scope.launch(Dispatchers.IO) {
                         val success = NexusEngine.setAdbRootEnabled(isChecked)
