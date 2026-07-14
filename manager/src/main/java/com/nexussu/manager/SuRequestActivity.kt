@@ -40,11 +40,13 @@ class SuRequestActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        val callerUidStr = intent.getStringExtra("caller_uid")
-        val pinStr = intent.getStringExtra("pin")
+        val callerUidStr = intent.getStringExtra("caller_uid") ?: "-1"
+        val pinStr = intent.getStringExtra("pin") ?: "0"
+        val pidStr = intent.getStringExtra("pid") ?: "0"
         
-        val callerUid = callerUidStr?.toIntOrNull() ?: -1
-        val pin = pinStr ?: "0"
+        val callerUid = callerUidStr.toIntOrNull() ?: -1
+        val pin = pinStr
+        val pid = pidStr
         
         if (callerUid == -1) {
             finish()
@@ -74,21 +76,16 @@ class SuRequestActivity : Activity() {
                     appIcon = appIcon,
                     onGrant = { rememberChoice ->
                         Thread {
-                            if (rememberChoice) {
-                                NexusEngine.saveGrantedUid(callerUid) // Permanent
-                            } else {
-                                NexusEngine.grantUidTemporary(callerUid) // Session only
-                            }
-                            createResponseFile(pin)
+                            if (rememberChoice) NexusEngine.saveGrantedUid(callerUid)
+                            else NexusEngine.grantUidTemporary(callerUid)
+                            createResponseFile(pin, pid)
                             Handler(Looper.getMainLooper()).post { finish() }
                         }.start()
                     },
                     onDeny = { rememberChoice ->
                         Thread {
-                            if (rememberChoice) {
-                                NexusEngine.saveDeniedUid(callerUid) // Add to denylist permanently
-                            }
-                            createResponseFile("0")
+                            if (rememberChoice) NexusEngine.saveDeniedUid(callerUid)
+                            createResponseFile("0", pid)
                             Handler(Looper.getMainLooper()).post { finish() }
                         }.start()
                     }
@@ -97,9 +94,10 @@ class SuRequestActivity : Activity() {
         }
     }
     
-    private fun createResponseFile(pin: String) {
+    // NEW: Write to unique PID-based file
+    private fun createResponseFile(pin: String, pid: String) {
         try {
-            val file = File("/data/local/tmp/.nexussu_response")
+            val file = File("/data/local/tmp/.nexussu_response_$pid")
             file.writeText(pin)
             file.setReadable(true, false)
         } catch (e: Exception) {
@@ -117,7 +115,7 @@ fun SuRequestDialog(
 ) {
     val p = LocalNexusPalette.current
     var timeLeft by remember { mutableStateOf(10) }
-    var rememberChoice by remember { mutableStateOf(true) } // Default to true
+    var rememberChoice by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         while (timeLeft > 0) {
@@ -155,17 +153,13 @@ fun SuRequestDialog(
             }
             
             Spacer(Modifier.height(16.dp))
-            
             Text("Superuser Request", color = p.dim, fontSize = 12.sp, fontFamily = MonoFont)
             Spacer(Modifier.height(4.dp))
             Text(appName, color = p.ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            
             Spacer(Modifier.height(8.dp))
             Text("is requesting root access.", color = p.dim, fontSize = 13.sp)
-            
             Spacer(Modifier.height(20.dp))
             
-            // Custom Remember Choice Toggle
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(p.glassFill)
                     .clickable(remember { MutableInteractionSource() }, indication = null) { rememberChoice = !rememberChoice }
@@ -173,14 +167,11 @@ fun SuRequestDialog(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Box(
-                    Modifier.size(20.dp).clip(CircleShape).background(if (rememberChoice) p.accent else Color.Transparent)
-                )
+                Box(Modifier.size(20.dp).clip(CircleShape).background(if (rememberChoice) p.accent else Color.Transparent))
                 Text("Remember choice", color = p.ink, fontSize = 13.sp, fontWeight = FontWeight.Medium)
             }
 
             Spacer(Modifier.height(20.dp))
-            
             Button(
                 onClick = { onGrant(rememberChoice) },
                 modifier = Modifier.fillMaxWidth(),
@@ -189,9 +180,7 @@ fun SuRequestDialog(
             ) {
                 Text("Grant", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 4.dp))
             }
-            
             Spacer(Modifier.height(8.dp))
-            
             OutlinedButton(
                 onClick = { onDeny(rememberChoice) },
                 modifier = Modifier.fillMaxWidth(),
@@ -200,7 +189,6 @@ fun SuRequestDialog(
             ) {
                 Text("Deny", fontWeight = FontWeight.Medium, modifier = Modifier.padding(vertical = 4.dp))
             }
-            
             Spacer(Modifier.height(12.dp))
             Text("Auto-denying in $timeLeft seconds...", color = p.dim.copy(alpha = 0.5f), fontSize = 10.sp, fontFamily = MonoFont)
         }
