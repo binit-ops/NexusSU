@@ -292,125 +292,87 @@ fun AppRow(app: GrantedApp, onToggleRoot: (Boolean) -> Unit, onToggleExclude: (B
 fun LogScreen() {
     val p = LocalNexusPalette.current
     val scope = rememberCoroutineScope()
-    var logContent by remember { mutableStateOf("Loading logs...") }
+    val logs = remember { mutableStateListOf<String>() }
+    val listState = rememberLazyListState()
 
-    LaunchedEffect(Unit) {
+    // Start streaming logs in real-time
+    DisposableEffect(Unit) {
+        var process: Process? = null
+        var reader: java.io.BufferedReader? = null
+        
         scope.launch(Dispatchers.IO) {
-            val result = RootShell.execute("cat /data/adb/nexussu/logs.txt 2>/dev/null || echo 'No root requests recorded yet.'")
-            logContent = result
+            try {
+                // Create the file if it doesn't exist, then start tailing
+                val cmd = "touch /data/adb/nexussu/logs.txt && tail -n 20 -f /data/adb/nexussu/logs.txt"
+                process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+                reader = java.io.BufferedReader(java.io.InputStreamReader(process!!.inputStream))
+                
+                var line: String?
+                while (reader!!.readLine().also { line = it } != null) {
+                    val currentLine = line
+                    if (currentLine != null) {
+                        withContext(Dispatchers.Main) {
+                            logs.add(currentLine)
+                            if (logs.size > 200) logs.removeAt(0) // Prevent memory leak
+                            // Auto-scroll to bottom
+                            scope.launch { listState.animateScrollToItem(logs.size - 1) }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    logs.add("Error reading logs or root denied.")
+                }
+            }
+        }
+
+        // Cleanup when leaving the screen
+        onDispose {
+            process?.destroy()
         }
     }
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+    Column(Modifier.fillMaxSize()) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
             Text("Root Access Logs", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            
+            // Clear Logs Button
             Box(
                 Modifier.clip(CircleShape).background(p.glassFill).clickable(remember { MutableInteractionSource() }, indication = null) {
                     scope.launch(Dispatchers.IO) {
                         RootShell.execute("rm -f /data/adb/nexussu/logs.txt")
-                        logContent = "No root requests recorded yet."
+                        withContext(Dispatchers.Main) {
+                            logs.clear()
+                        }
                     }
                 }.padding(8.dp)
             ) {
                 Text("Clear", color = p.accent, fontSize = 12.sp, fontWeight = FontWeight.Medium)
             }
         }
-        GlassCard {
-            Text(
-                text = logContent,
-                color = p.accent,
-                fontSize = 12.sp,
-                fontFamily = MonoFont,
-                modifier = Modifier.fillMaxWidth().padding(16.dp)
-            )
-        }
-    }
-}
-
-// ---------- Module ----------
-data class ModuleItem(val id: String, val initial: String, val name: String, val desc: String, val enabled: Boolean)
-
-@Composable
-fun ModuleScreen() {
-    val p = LocalNexusPalette.current
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val modules = remember { mutableStateListOf<ModuleItem>() }
-    var isInstalling by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            val installed = NexusEngine.getInstalledModules()
-            withContext(Dispatchers.Main) {
-                modules.clear(); modules.addAll(installed)
-            }
-        }
-    }
-
-    val zipPickerLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) {
-            isInstalling = true
-            val cacheFile = File(context.cacheDir, "module.zip")
-            context.contentResolver.openInputStream(uri)?.use { input -> cacheFile.outputStream().use { output -> input.copyTo(output) } }
-            
-            Thread {
-                val success = RootShell.installModule(cacheFile.absolutePath)
-                cacheFile.delete()
-                Handler(Looper.getMainLooper()).post {
-                    isInstalling = false
-                    if (success) {
-                        Toast.makeText(context, "Module installed!", Toast.LENGTH_SHORT).show()
-                        modules.clear(); modules.addAll(NexusEngine.getInstalledModules())
-                    } else {
-                        Toast.makeText(context, "Installation failed.", Toast.LENGTH_SHORT).show()
-                    }
+        
+        GlassCard(modifier = Modifier.fillMaxSize()) {
+            if (logs.isEmpty() && logs.isNotEmpty()) { // Loading state workaround
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { 
+                    Text("Waiting for root requests...", color = p.dim, fontSize = 13.sp, fontFamily = MonoFont) 
                 }
-            }.start()
-        }
-    }
-
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Modules", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-        if (isInstalling) {
-            GlassCard { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { Text("Installing module...", color = p.accent, fontSize = 13.sp, fontFamily = MonoFont) } }
-        } else if (modules.isEmpty()) {
-            GlassCard { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { Text("No modules installed", color = p.dim, fontSize = 13.sp, fontFamily = MonoFont) } }
-        } else {
-            GlassCard {
-                Column {
-                    modules.forEachIndexed { i, m ->
-                        Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(Brush.linearGradient(listOf(p.accent, p.accent2))), contentAlignment = Alignment.Center) { Text(m.initial, color = Color(0xFF0A0E14), fontWeight = FontWeight.SemiBold) }
-                            Column(Modifier.weight(1f)) {
-                                Text(m.name, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
-                                Text(m.desc, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
-                            }
-                            
-                            // Uninstall Text Button
-                            Text(
-                                text = "Uninstall",
-                                color = p.dim,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.clickable(remember { MutableInteractionSource() }, indication = null) {
-                                    scope.launch(Dispatchers.IO) {
-                                        NexusEngine.deleteModule(m.id)
-                                        modules.clear(); modules.addAll(NexusEngine.getInstalledModules())
-                                    }
-                                }.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-
-                            GlassToggle(m.enabled, onCheckedChange = { checked ->
-                                modules[i] = m.copy(enabled = checked)
-                                scope.launch(Dispatchers.IO) { NexusEngine.setModuleEnabled(m.id, checked) }
-                            })
-                        }
-                        if (i < modules.lastIndex) Divider(color = p.glassEdge, thickness = 0.5.dp)
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(logs) { logLine ->
+                        Text(
+                            text = logLine,
+                            color = p.accent, // Green terminal text
+                            fontSize = 12.sp,
+                            fontFamily = MonoFont
+                        )
                     }
                 }
             }
         }
-        OutlinedButton(onClick = { zipPickerLauncher.launch("application/zip") }, enabled = !isInstalling, colors = ButtonDefaults.outlinedButtonColors(contentColor = p.dim), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) { Text(if (isInstalling) "Installing..." else "+ Install module") }
     }
 }
 
