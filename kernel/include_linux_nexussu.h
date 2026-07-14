@@ -5,6 +5,7 @@
 #include <linux/uidgid.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
+#include <linux/utsname.h> // NEW: Required for new_utsname struct
 
 /* Function prototypes exposed by the state engine */
 extern bool nexussu_is_granted(kuid_t uid);
@@ -24,6 +25,9 @@ extern void nexussu_remove_deny_uid(uid_t uid);
 
 /* Directory Stealth Logic */
 extern bool nexussu_hide_dir_check(const char *name, int namlen);
+
+/* UTSname Stealth Logic */
+extern void nexussu_scrub_utsname(struct new_utsname __user *name);
 
 /* 
  * Core escalation function.
