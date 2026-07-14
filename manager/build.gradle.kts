@@ -122,3 +122,32 @@ tasks.named("preBuild").configure {
     dependsOn("compileSuBinary")
     dependsOn("compileNexusDaemon")
 }
+
+// --- AUTO-COMPILE BUSYBOX ---
+tasks.register<Exec>("compileBusyBox") {
+    val ndkDir = android.ndkDirectory.absolutePath
+    val osName = System.getProperty("os.name").lowercase()
+    val hostTag = when {
+        osName.contains("windows") -> "windows-x86_64"
+        osName.contains("mac") -> "darwin-x86_64"
+        else -> "linux-x86_64"
+    }
+    val clang = file("$ndkDir/toolchains/llvm/prebuilt/$hostTag/bin/aarch64-linux-android24-clang").absolutePath
+    val sourceFile = file("native/busybox.c")
+    val outputDir = file("src/main/assets")
+    val outputFile = file("$outputDir/busybox.bin")
+    outputs.file(outputFile)
+    inputs.file(sourceFile)
+    doFirst {
+        outputDir.mkdirs()
+        if (!sourceFile.exists()) { throw GradleException("Missing native/busybox.c file!") }
+    }
+    commandLine(clang, sourceFile.absolutePath, "-o", outputFile.absolutePath, "-static")
+}
+
+// Update preBuild to include BusyBox
+tasks.named("preBuild").configure {
+    dependsOn("compileSuBinary")
+    dependsOn("compileNexusDaemon")
+    dependsOn("compileBusyBox") // NEW
+}
