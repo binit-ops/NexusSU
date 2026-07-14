@@ -14,7 +14,10 @@ class SuRequestActivity : Activity() {
         super.onCreate(savedInstanceState)
         
         val callerUidStr = intent.getStringExtra("caller_uid")
+        val pinStr = intent.getStringExtra("pin")
+        
         val callerUid = callerUidStr?.toIntOrNull() ?: -1
+        val pin = pinStr ?: "0"
         
         if (callerUid == -1) {
             finish()
@@ -38,15 +41,15 @@ class SuRequestActivity : Activity() {
                 Thread {
                     // Grant root via prctl and persist to file
                     NexusEngine.saveGrantedUid(callerUid)
-                    // Signal the su binary to proceed
-                    createResponseFile()
+                    // Signal the su binary to proceed by writing the exact PIN
+                    createResponseFile(pin)
                     Handler(Looper.getMainLooper()).post { finish() }
                 }.start()
             }
             .setNegativeButton("Deny") { _, _ ->
                 Thread {
-                    // Just signal the su binary (no grant)
-                    createResponseFile()
+                    // Just signal the su binary with an invalid PIN so it denies
+                    createResponseFile("0")
                     Handler(Looper.getMainLooper()).post { finish() }
                 }.start()
             }
@@ -54,10 +57,10 @@ class SuRequestActivity : Activity() {
             .show()
     }
     
-    private fun createResponseFile() {
+    private fun createResponseFile(pin: String) {
         try {
             val file = File("/data/local/tmp/.nexussu_response")
-            file.createNewFile()
+            file.writeText(pin)
             file.setReadable(true, false)
         } catch (e: Exception) {
             e.printStackTrace()
