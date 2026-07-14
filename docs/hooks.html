@@ -32,7 +32,7 @@
         <hr style="margin: 40px 0; border-color: var(--border);">
 
         <h2>Method 2: Manual Source Injection</h2>
-        <p>If the automated script fails due to heavy ROM source modifications, you can manually patch the kernel using the following steps.</p>
+        <p>If the automated script fails due to heavy ROM source modifications, you can manually patch the kernel using the following 11 steps.</p>
         
         <h3>Step 1: Add Core Engine Files</h3>
         <div class="code-window">
@@ -50,6 +50,7 @@
 + #include &lt;linux/uidgid.h&gt;
 + #include &lt;linux/sched.h&gt;
 + #include &lt;linux/fs.h&gt;
++ #include &lt;linux/utsname.h&gt;
 + 
 + extern bool nexussu_is_granted(kuid_t uid);
 + extern void nexussu_add_trusted_uid(uid_t uid);
@@ -62,6 +63,7 @@
 + extern void nexussu_add_deny_uid(uid_t uid);
 + extern void nexussu_remove_deny_uid(uid_t uid);
 + extern bool nexussu_hide_dir_check(const char *name, int namlen);
++ extern void nexussu_scrub_utsname(struct new_utsname __user *name);
 + 
 + static inline void nexussu_escalate(void) {
 +     struct cred *new_creds = prepare_creds();
@@ -169,40 +171,20 @@
         <div class="code-window">
             <div class="code-toolbar">
                 <div class="code-info">
-                    <span class="file-badge">fs/open.c</span>
-                    <span class="search-badge">🔍 Search: do_faccessat & faccessat2</span>
+                    <span class="file-badge">fs/open.c & fs/stat.c</span>
+                    <span class="search-badge">🔍 Search: do_faccessat, faccessat2, vfs_statx</span>
                 </div>
             </div>
             <pre><code class="language-c">
-  /* At the top of the file: */
+  /* At the top of both files: */
 <code class="diff-add">
 + #include &lt;linux/nexussu.h&gt;
 </code>
 
-  /* Inside SYSCALL_DEFINE3(do_faccessat, ...) */
-  /* Add at the top of the function: */
+  /* Inside SYSCALL_DEFINE3(do_faccessat, ...) and SYSCALL_DEFINE4(faccessat2, ...) */
+  /* Add at the top of the functions: */
 <code class="diff-add">
 + if (nexussu_stealth_check(filename)) return -ENOENT;
-</code>
-
-  /* Inside SYSCALL_DEFINE4(faccessat2, ...) */
-  /* Add at the top of the function: */
-<code class="diff-add">
-+ if (nexussu_stealth_check(filename)) return -ENOENT;
-</code>
-            </code></pre>
-        </div>
-        <div class="code-window">
-            <div class="code-toolbar">
-                <div class="code-info">
-                    <span class="file-badge">fs/stat.c</span>
-                    <span class="search-badge">🔍 Search: int vfs_statx</span>
-                </div>
-            </div>
-            <pre><code class="language-c">
-  /* At the top of the file: */
-<code class="diff-add">
-+ #include &lt;linux/nexussu.h&gt;
 </code>
 
   /* Inside int vfs_statx(...) */
@@ -255,16 +237,10 @@
 + #include &lt;linux/sched.h&gt;
 </code>
 
-  /* Inside int avc_has_perm(...) */
-  /* Add at the top of the function: */
+  /* Inside int avc_has_perm(...) and int avc_has_extended_perms(...) */
+  /* Add at the top of the functions: */
 <code class="diff-add">
 + if (current->nexussu_granted) return 0;
-</code>
-
-  /* Inside int avc_has_extended_perms(...) */
-  /* Add at the top of the function: */
-<code class="diff-add">
-+ if (current->nexussu_granted) return 0; 
 </code>
             </code></pre>
         </div>
@@ -315,7 +291,7 @@
             </code></pre>
         </div>
 
-        <h3>Step 10: Advanced Directory Stealth (fs/readdir.c)</h3>
+        <h3>Step 10: Advanced Directory Stealth</h3>
         <div class="code-window">
             <div class="code-toolbar">
                 <div class="code-info">
@@ -337,6 +313,27 @@
             </code></pre>
         </div>
 
+        <h3>Step 11: UTSname Stealth (Kernel Version Scrubbing)</h3>
+        <div class="code-window">
+            <div class="code-toolbar">
+                <div class="code-info">
+                    <span class="file-badge">kernel/sys.c</span>
+                    <span class="search-badge">🔍 Search: SYSCALL_DEFINE1(newuname</span>
+                </div>
+            </div>
+            <pre><code class="language-c">
+  /* Inside SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name) */
+  /* Locate the final 'return errno;' inside the function block */
+  /* Replace it with: */
+<code class="diff-add">
++ if (errno == 0) { 
++     nexussu_scrub_utsname(name); 
++ } 
++ return errno;
+</code>
+            </code></pre>
+        </div>
+
     </div>
 </body>
-    </html>
+</html>
