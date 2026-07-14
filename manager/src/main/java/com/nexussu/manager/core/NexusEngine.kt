@@ -9,15 +9,21 @@ import java.io.FileOutputStream
 object NexusEngine {
     private const val TAG = "NexusEngine"
     private const val CONFIG_PATH = "/data/adb/nexussu/granted_uids.txt"
+    private const val DENYLIST_PATH = "/data/adb/nexussu/denylist.txt"
     const val ADB_UID = 2000 // Standard Android ADB Shell UID
 
     init { try { System.loadLibrary("nexus_bridge") } catch (e: UnsatisfiedLinkError) {} }
 
+    // JNI External Functions
     external fun registerManager(): Boolean
     external fun grantUidAccess(uid: Int): Boolean
     external fun revokeUidAccess(uid: Int): Boolean
     external fun getEngineVersion(): Int
     external fun escalateSelf(): Boolean
+    
+    // NEW: Denylist JNI Functions
+    external fun addDenyUid(uid: Int): Boolean
+    external fun removeDenyUid(uid: Int): Boolean
 
     fun isKernelActive(): Boolean {
         if (getEngineVersion() != 100) return false
@@ -62,6 +68,7 @@ object NexusEngine {
         }
     }
 
+    // --- Root Grants ---
     fun applySavedRootGrants() {
         val uids = RootShell.execute("cat $CONFIG_PATH")
         uids.split("\n").forEach { uidStr ->
@@ -90,19 +97,16 @@ object NexusEngine {
         getGrantedUids().forEach { revokeUidAccess(it) }
     }
 
-    // ADB Root Toggle
+    // --- ADB Root ---
     fun setAdbRootEnabled(enabled: Boolean): Boolean {
-        return if (enabled) {
-            grantUidAccess(ADB_UID)
-        } else {
-            revokeUidAccess(ADB_UID)
-        }
+        return if (enabled) grantUidAccess(ADB_UID) else revokeUidAccess(ADB_UID)
     }
 
     fun isAdbRootEnabled(): Boolean {
         return getGrantedUids().contains(ADB_UID)
     }
 
+    // --- Systemless Hosts ---
     fun enableSystemlessHosts(): Boolean {
         val cmd = "mkdir -p /data/adb/nexussu && echo '127.0.0.1 localhost' > /data/adb/nexussu/hosts && mount -o bind /data/adb/nexussu/hosts /system/etc/hosts"
         return RootShell.executeBoolean(cmd)
@@ -112,6 +116,24 @@ object NexusEngine {
         return RootShell.executeBoolean("umount /system/etc/hosts")
     }
 
+    // --- Denylist (Exclude Modifications) ---
+    // NEW: Real denylist logic
+    fun saveDeniedUid(uid: Int) {
+        addDenyUid(uid)
+        RootShell.execute("echo $uid >> $DENYLIST_PATH")
+    }
+
+    fun removeDeniedUid(uid: Int) {
+        removeDenyUid(uid)
+        RootShell.execute("sed -i '/^$uid$/d' $DENYLIST_PATH")
+    }
+
+    fun getDeniedUids(): List<Int> {
+        val uids = RootShell.execute("cat $DENYLIST_PATH")
+        return uids.split("\n").mapNotNull { it.trim().toIntOrNull() }
+    }
+
+    // --- Modules ---
     fun getInstalledModules(): List<ModuleItem> {
         val modules = mutableListOf<ModuleItem>()
         val result = RootShell.execute("ls /data/adb/nexussu/modules")
@@ -129,7 +151,6 @@ object NexusEngine {
         return modules
     }
 
-    // NEW: Fast count of active modules
     fun getActiveModulesCount(): Int {
         val result = RootShell.execute("ls /data/adb/nexussu/modules 2>/dev/null")
         if (result == "Error" || result.isBlank()) return 0
@@ -148,7 +169,6 @@ object NexusEngine {
         return RootShell.setModuleEnabled(id, enabled)
     }
 
-    // Wrapper for module deletion
     fun deleteModule(id: String): Boolean {
         return RootShell.deleteModule(id)
     }
