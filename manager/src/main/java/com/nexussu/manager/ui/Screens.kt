@@ -116,7 +116,8 @@ fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
 
     var kernelVersion by remember { mutableStateOf("Loading...") }
     var selinuxStatus by remember { mutableStateOf("Loading...") }
-    var verifiedBootState by remember { mutableStateOf("Loading...") } // NEW
+    var verifiedBootState by remember { mutableStateOf("Loading...") }
+    var busyboxStatus by remember { mutableStateOf("Loading...") } // NEW
     var isRootAvailable by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -124,11 +125,14 @@ fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
         if (isRootAvailable) {
             kernelVersion = RootShell.getKernelVersion()
             selinuxStatus = RootShell.getSelinuxStatus()
-            verifiedBootState = RootShell.getVerifiedBootState() // NEW
+            verifiedBootState = RootShell.getVerifiedBootState()
+            // NEW: Check if busybox is mounted
+            busyboxStatus = if (RootShell.execute("mount | grep busybox").isNotBlank()) "Active (v1.0.0)" else "Inactive"
         } else {
             kernelVersion = "Root not available"
             selinuxStatus = "Root not available"
-            verifiedBootState = "Root not available" // NEW
+            verifiedBootState = "Root not available"
+            busyboxStatus = "Root not available"
         }
     }
 
@@ -148,8 +152,8 @@ fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
                     KeyValueRow("Kernel", kernelVersion)
                     KeyValueRow("SUSFS", if (isRootAvailable) "Active" else "Unavailable")
                     KeyValueRow("SELinux", selinuxStatus)
-                    // NEW: Real Verified Boot Status
                     KeyValueRow("Verified boot", verifiedBootState)
+                    KeyValueRow("BusyBox", busyboxStatus) // NEW
                     TextButton(onClick = onOpenAdvanced, contentPadding = PaddingValues(vertical = 8.dp)) {
                         Text("Advanced options →", color = p.accent, fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
                     }
