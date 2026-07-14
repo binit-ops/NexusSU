@@ -66,7 +66,6 @@ object NexusEngine {
         }
     }
 
-    // NEW: Install BusyBox
     fun installBusyBox(context: Context): Boolean {
         try {
             val bbAsset = context.assets.open("busybox.bin")
@@ -104,6 +103,11 @@ object NexusEngine {
     fun saveGrantedUid(uid: Int) {
         grantUidAccess(uid)
         RootShell.execute("echo $uid >> $CONFIG_PATH")
+    }
+
+    // NEW: Grant root for this session only (does not survive reboot)
+    fun grantUidTemporary(uid: Int) {
+        grantUidAccess(uid)
     }
 
     fun removeGrantedUid(uid: Int) {
