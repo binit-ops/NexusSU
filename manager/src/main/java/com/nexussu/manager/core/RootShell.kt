@@ -25,6 +25,18 @@ object RootShell {
     fun isRootAvailable(): Boolean = executeBoolean("id")
     fun getKernelVersion(): String = execute("uname -r")
     fun getSelinuxStatus(): String = execute("getenforce")
+
+        // NEW: Get real Verified Boot state
+    fun getVerifiedBootState(): String {
+        val state = execute("getprop ro.boot.verifiedbootstate").trim()
+        return when (state) {
+            "green" -> "Green (Locked)"
+            "yellow" -> "Yellow (Locked Custom)"
+            "orange" -> "Orange (Unlocked)"
+            "red" -> "Red (Unverified)"
+            else -> "Unknown ($state)"
+        }
+    }
     
     fun installModule(zipPath: String): Boolean {
         val cmd = """
