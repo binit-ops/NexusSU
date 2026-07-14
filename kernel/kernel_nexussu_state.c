@@ -3,6 +3,7 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/uaccess.h>
+#include <linux/utsname.h> // NEW: Required for utsname scrubbing
 
 static uid_t nexussu_trusted_uids[256];
 static int nexussu_uid_count = 0;
@@ -105,6 +106,33 @@ bool nexussu_hide_dir_check(const char *name, int namlen) {
     if (namlen == 6 && strncmp(name, "magisk", 6) == 0) return true;
     
     return false;
+}
+
+/* 
+ * UTSname Stealth Check: Used by the newuname syscall.
+ * Scrubs custom kernel tags (like -nexussu, -lineage) from the version string.
+ */
+void nexussu_scrub_utsname(struct new_utsname __user *name) {
+    struct new_utsname kname;
+    if (!name) return;
+    
+    if (copy_from_user(&kname, name, sizeof(kname)) == 0) {
+        bool modified = false;
+        char *tags[] = { "nexussu", "magisk", "lineage", "-perf", "LineageOS", "crdroid", "aosp" };
+        int i;
+        for (i = 0; i < 7; i++) {
+            char *ptr = strstr(kname.release, tags[i]);
+            if (ptr != NULL) {
+                int len = strlen(tags[i]);
+                memset(ptr, ' ', len);
+                modified = true;
+            }
+        }
+        
+        if (modified) {
+            copy_to_user(name, &kname, sizeof(kname));
+        }
+    }
 }
 
 /* 
