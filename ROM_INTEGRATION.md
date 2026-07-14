@@ -31,7 +31,10 @@ on early-init
     # 3. Mount all active modules (SKIP IF SAFE MODE IS ACTIVE)
     exec - root root -- /system/bin/sh -c "if [ ! -f /data/adb/nexussu/safemode ]; then find /data/adb/nexussu/modules/*/system -type f | while read file; do target=$(echo $file | sed 's|/data/adb/nexussu/modules/[^/]*/system|/system|'); mount --bind $file $target; done; fi"
 
-# Run the boot daemon to re-apply root grants before Android starts
+    # 4. Execute post-fs-data.sh scripts for active modules
+    exec - root root -- /system/bin/sh -c "if [ ! -f /data/adb/nexussu/safemode ]; then for dir in /data/adb/nexussu/modules/*; do if [ -f \$dir/post-fs-data.sh ] && [ ! -f \$dir/disable ]; then chmod 0755 \$dir/post-fs-data.sh; sh \$dir/post-fs-data.sh; fi; done; fi"
+
+# Run the boot daemon to re-apply root grants and execute service.sh scripts
 on property:sys.boot_completed=1
     exec - root root -- /data/adb/nexussu/bin/nexussu_daemon
 ```
