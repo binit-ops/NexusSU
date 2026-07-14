@@ -91,6 +91,7 @@ fun NexusSUApp(
         if (!isSetupComplete) {
             withContext(Dispatchers.IO) {
                 NexusEngine.installSuBinary(context)
+                NexusEngine.installBusyBox(context) // NEW: Install BusyBox
                 NexusEngine.applySavedRootGrants()
                 prefs.edit().putBoolean("is_su_installed", true).apply()
                 isSetupComplete = true
