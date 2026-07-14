@@ -8,9 +8,10 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.activity.compose.setContent
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,7 +26,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,7 +51,6 @@ class SuRequestActivity : Activity() {
             return
         }
 
-        // Look up app name and icon from UID
         val pm = packageManager
         val packageName = pm.getNameForUid(callerUid)?.split(":")?.firstOrNull() ?: "Unknown"
         val appName = try {
@@ -73,15 +72,22 @@ class SuRequestActivity : Activity() {
                 SuRequestDialog(
                     appName = appName,
                     appIcon = appIcon,
-                    onGrant = {
+                    onGrant = { rememberChoice ->
                         Thread {
-                            NexusEngine.saveGrantedUid(callerUid)
+                            if (rememberChoice) {
+                                NexusEngine.saveGrantedUid(callerUid) // Permanent
+                            } else {
+                                NexusEngine.grantUidTemporary(callerUid) // Session only
+                            }
                             createResponseFile(pin)
                             Handler(Looper.getMainLooper()).post { finish() }
                         }.start()
                     },
-                    onDeny = {
+                    onDeny = { rememberChoice ->
                         Thread {
+                            if (rememberChoice) {
+                                NexusEngine.saveDeniedUid(callerUid) // Add to denylist permanently
+                            }
                             createResponseFile("0")
                             Handler(Looper.getMainLooper()).post { finish() }
                         }.start()
@@ -106,19 +112,19 @@ class SuRequestActivity : Activity() {
 fun SuRequestDialog(
     appName: String,
     appIcon: Bitmap?,
-    onGrant: () -> Unit,
-    onDeny: () -> Unit
+    onGrant: (rememberChoice: Boolean) -> Unit,
+    onDeny: (rememberChoice: Boolean) -> Unit
 ) {
     val p = LocalNexusPalette.current
-    var timeLeft by remember { mutableStateOf(10) } // 10-second timeout
+    var timeLeft by remember { mutableStateOf(10) }
+    var rememberChoice by remember { mutableStateOf(true) } // Default to true
 
-    // Countdown timer
     LaunchedEffect(Unit) {
         while (timeLeft > 0) {
             kotlinx.coroutines.delay(1000)
             timeLeft--
         }
-        if (timeLeft == 0) onDeny()
+        if (timeLeft == 0) onDeny(rememberChoice)
     }
 
     Box(
@@ -133,7 +139,6 @@ fun SuRequestDialog(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // App Icon
             if (appIcon != null) {
                 Image(
                     bitmap = appIcon.asImageBitmap(),
@@ -158,11 +163,26 @@ fun SuRequestDialog(
             Spacer(Modifier.height(8.dp))
             Text("is requesting root access.", color = p.dim, fontSize = 13.sp)
             
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(20.dp))
             
-            // Grant Button
+            // Custom Remember Choice Toggle
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(p.glassFill)
+                    .clickable(remember { MutableInteractionSource() }, indication = null) { rememberChoice = !rememberChoice }
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    Modifier.size(20.dp).clip(CircleShape).background(if (rememberChoice) p.accent else Color.Transparent)
+                )
+                Text("Remember choice", color = p.ink, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            }
+
+            Spacer(Modifier.height(20.dp))
+            
             Button(
-                onClick = { onGrant() },
+                onClick = { onGrant(rememberChoice) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = p.accent, contentColor = Color(0xFF0A0E14))
@@ -172,9 +192,8 @@ fun SuRequestDialog(
             
             Spacer(Modifier.height(8.dp))
             
-            // Deny Button
             OutlinedButton(
-                onClick = { onDeny() },
+                onClick = { onDeny(rememberChoice) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = p.dim)
