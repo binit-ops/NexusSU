@@ -38,36 +38,50 @@ object RootShell {
         }
     }
     
-        fun installModule(zipPath: String): Boolean {
+    fun installModule(zipPath: String): Boolean {
         val cmd = """
+            LOGFILE=/data/adb/nexussu/install.log
+            echo "--- NexusSU Module Installation ---" > $LOGFILE
+            echo "ZIP: $zipPath" >> $LOGFILE
+            
             mkdir -p /data/adb/nexussu/modules_temp
-            unzip -o $zipPath -d /data/adb/nexussu/modules_temp
+            unzip -o $zipPath -d /data/adb/nexussu/modules_temp >> $LOGFILE 2>&1
+            
             if [ -f /data/adb/nexussu/modules_temp/module.prop ]; then
                 ID=$(grep '^id=' /data/adb/nexussu/modules_temp/module.prop | cut -d= -f2)
                 mkdir -p /data/adb/nexussu/modules/$ID
                 cp -r /data/adb/nexussu/modules_temp/* /data/adb/nexussu/modules/$ID/
                 rm -rf /data/adb/nexussu/modules_temp
                 
-                # NEW: Execute install.sh if it exists
-                if [ -f /data/adb/nexussu/modules/$ID/install.sh ]; then
-                    chmod 0755 /data/adb/nexussu/modules/$ID/install.sh
-                    # Set up Magisk-style environment variables so the script knows where it is
-                    export MODPATH=/data/adb/nexussu/modules/$ID
-                    export ZIPFILE=$zipPath
-                    sh /data/adb/nexussu/modules/$ID/install.sh
+                export MODPATH=/data/adb/nexussu/modules/$ID
+                export ZIPFILE=$zipPath
+                
+                # NEW: Execute customize.sh (Magisk standard) or install.sh
+                if [ -f $MODPATH/customize.sh ]; then
+                    chmod 0755 $MODPATH/customize.sh
+                    echo "Executing customize.sh..." >> $LOGFILE
+                    # Provide a dummy ui_print function so scripts don't crash
+                    ui_print() { echo "[UI] $1" >> $LOGFILE; }
+                    export -f ui_print
+                    sh $MODPATH/customize.sh >> $LOGFILE 2>&1
+                elif [ -f $MODPATH/install.sh ]; then
+                    chmod 0755 $MODPATH/install.sh
+                    echo "Executing install.sh..." >> $LOGFILE
+                    sh $MODPATH/install.sh >> $LOGFILE 2>&1
                 fi
                 
                 # Mount the system files if installation was successful
-                if [ -d /data/adb/nexussu/modules/$ID/system ]; then
-                    find /data/adb/nexussu/modules/$ID/system -type f | while read file; do
-                        target_path="/system${'$'}{file#/data/adb/nexussu/modules/$ID/system}"
+                if [ -d $MODPATH/system ]; then
+                    find $MODPATH/system -type f | while read file; do
+                        target_path="/system${'$'}{file#$MODPATH/system}"
                         mkdir -p ${'$'}(dirname ${'$'}target_path)
-                        mount --bind ${'$'}file ${'$'}target_path
+                        mount --bind ${'$'}file ${'$'}target_path 2>> $LOGFILE
                     done
                 fi
                 echo "SUCCESS"
             else
                 rm -rf /data/adb/nexussu/modules_temp
+                echo "FAILED: module.prop not found" >> $LOGFILE
                 echo "FAILED"
             fi
         """.trimIndent()
