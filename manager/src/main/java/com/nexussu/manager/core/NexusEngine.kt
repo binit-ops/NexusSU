@@ -86,6 +86,19 @@ object NexusEngine {
         }
     }
 
+    // --- Temporary Root ---
+    fun disableRoot(): Boolean {
+        val cmd = "umount /system/bin/su 2>/dev/null; umount /system/bin/busybox 2>/dev/null; echo 'SUCCESS'"
+        return RootShell.executeBoolean(cmd)
+    }
+
+    fun enableRoot(): Boolean {
+        val cmd = "mount --bind /data/adb/nexussu/bin/su /system/bin/su 2>/dev/null; " +
+                  "mount --bind /data/adb/nexussu/bin/busybox /system/bin/busybox 2>/dev/null; " +
+                  "echo 'SUCCESS'"
+        return RootShell.executeBoolean(cmd)
+    }
+
     // --- Root Grants ---
     fun applySavedRootGrants() {
         val uids = RootShell.execute("cat $CONFIG_PATH")
@@ -105,7 +118,6 @@ object NexusEngine {
         RootShell.execute("echo $uid >> $CONFIG_PATH")
     }
 
-    // NEW: Grant root for this session only (does not survive reboot)
     fun grantUidTemporary(uid: Int) {
         grantUidAccess(uid)
     }
@@ -194,9 +206,8 @@ object NexusEngine {
     fun deleteModule(id: String): Boolean {
         return RootShell.deleteModule(id)
     }
-}
 
-// NEW: Fetch installation log
     fun getInstallLog(): String {
         return RootShell.execute("cat /data/adb/nexussu/install.log 2>/dev/null || echo 'No log found.'")
     }
+}
