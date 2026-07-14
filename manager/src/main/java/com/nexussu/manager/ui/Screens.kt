@@ -79,12 +79,14 @@ fun HomeScreen(onOpenAdvanced: () -> Unit) {
     
     var grantedCount by remember { mutableStateOf(0) }
     var moduleCount by remember { mutableStateOf(0) }
-    var isRootActive by remember { mutableStateOf(false) }
+    var isRootActive by remember { mutableStateOf(true) } // Default to true to avoid flicker, check in background
+    var isKernelPatched by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         scope.launch(Dispatchers.IO) {
-            isRootActive = NexusEngine.isKernelActive()
-            if (isRootActive) {
+            isKernelPatched = NexusEngine.isKernelActive()
+            isRootActive = RootShell.isRootAvailable()
+            if (isKernelPatched && isRootActive) {
                 grantedCount = NexusEngine.getGrantedUids().size
                 moduleCount = NexusEngine.getActiveModulesCount()
             }
@@ -92,8 +94,33 @@ fun HomeScreen(onOpenAdvanced: () -> Unit) {
     }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // NEW: Kernel Warning Banner
+        if (!isKernelPatched) {
+            GlassCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp)
+            ) {
+                Row(
+                    Modifier.padding(16.dp), 
+                    verticalAlignment = Alignment.CenterVertically, 
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        Modifier.size(40.dp).clip(CircleShape).background(Color(0xFFFF5252).copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("!", color = Color(0xFFFF5252), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("Kernel Not Patched", color = Color(0xFFFF5252), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text("NexusSU kernel hooks are missing. Root features are disabled.", color = p.dim, fontSize = 11.sp, fontFamily = MonoFont)
+                    }
+                }
+            }
+        }
+
         Column(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            RootLens(isActive = isRootActive)
+            RootLens(isActive = isRootActive && isKernelPatched)
             Spacer(Modifier.height(12.dp))
             Text("$grantedCount apps granted · $moduleCount modules active", color = p.dim, fontSize = 11.sp, fontFamily = MonoFont)
         }
