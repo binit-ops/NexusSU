@@ -32,16 +32,11 @@
         <hr style="margin: 40px 0; border-color: var(--border);">
 
         <h2>Method 2: Manual Source Injection</h2>
-        <p>If the automated script fails due to heavy ROM source modifications, you can manually patch the kernel using the following 11 steps.</p>
+        <p>If the automated script fails due to heavy ROM source modifications, you can manually patch the kernel using the following 12 steps.</p>
         
         <h3>Step 1: Add Core Engine Files</h3>
         <div class="code-window">
-            <div class="code-toolbar">
-                <div class="code-info">
-                    <span class="file-badge">include/linux/nexussu.h</span>
-                    <span class="search-badge">📝 Action: Create New File</span>
-                </div>
-            </div>
+            <div class="code-toolbar"><div class="code-info"><span class="file-badge">include/linux/nexussu.h</span><span class="search-badge">📝 Action: Create New File</span></div></div>
             <pre><code class="language-c diff-add">
 + #ifndef _NEXUSSU_H
 + #define _NEXUSSU_H
@@ -90,12 +85,7 @@
 
         <h3>Step 2: Task Struct Flag</h3>
         <div class="code-window">
-            <div class="code-toolbar">
-                <div class="code-info">
-                    <span class="file-badge">include/linux/sched.h</span>
-                    <span class="search-badge">🔍 Search: struct task_struct {</span>
-                </div>
-            </div>
+            <div class="code-toolbar"><div class="code-info"><span class="file-badge">include/linux/sched.h</span><span class="search-badge">🔍 Search: struct task_struct {</span></div></div>
             <pre><code class="language-c">
   /* Locate struct task_struct { ... } */
   /* Add this near the end of the struct, before the closing brace }; */
@@ -107,12 +97,7 @@
 
         <h3>Step 3: prctl Syscall Hook</h3>
         <div class="code-window">
-            <div class="code-toolbar">
-                <div class="code-info">
-                    <span class="file-badge">kernel/sys.c</span>
-                    <span class="search-badge">🔍 Search: SYSCALL_DEFINE5(prctl</span>
-                </div>
-            </div>
+            <div class="code-toolbar"><div class="code-info"><span class="file-badge">kernel/sys.c</span><span class="search-badge">🔍 Search: SYSCALL_DEFINE5(prctl</span></div></div>
             <pre><code class="language-c">
   /* At the top of the file: */
 <code class="diff-add">
@@ -143,12 +128,7 @@
 
         <h3>Step 4: Execution Interception & Denylist</h3>
         <div class="code-window">
-            <div class="code-toolbar">
-                <div class="code-info">
-                    <span class="file-badge">fs/exec.c</span>
-                    <span class="search-badge">🔍 Search: prepare_bprm_creds</span>
-                </div>
-            </div>
+            <div class="code-toolbar"><div class="code-info"><span class="file-badge">fs/exec.c</span><span class="search-badge">🔍 Search: prepare_bprm_creds</span></div></div>
             <pre><code class="language-c">
   /* At the top of the file: */
 <code class="diff-add">
@@ -169,12 +149,7 @@
 
         <h3>Step 5: Advanced VFS Stealth</h3>
         <div class="code-window">
-            <div class="code-toolbar">
-                <div class="code-info">
-                    <span class="file-badge">fs/open.c & fs/stat.c</span>
-                    <span class="search-badge">🔍 Search: do_faccessat, faccessat2, vfs_statx</span>
-                </div>
-            </div>
+            <div class="code-toolbar"><div class="code-info"><span class="file-badge">fs/open.c & fs/stat.c</span><span class="search-badge">🔍 Search: do_faccessat, faccessat2, vfs_statx</span></div></div>
             <pre><code class="language-c">
   /* At the top of both files: */
 <code class="diff-add">
@@ -195,14 +170,9 @@
             </code></pre>
         </div>
 
-                <h3>Step 6: Procfs Scrubbing</h3>
+        <h3>Step 6: Procfs Scrubbing</h3>
         <div class="code-window">
-            <div class="code-toolbar">
-                <div class="code-info">
-                    <span class="file-badge">fs/read_write.c</span>
-                    <span class="search-badge">🔍 Search: rw_verify_area(READ</span>
-                </div>
-            </div>
+            <div class="code-toolbar"><div class="code-info"><span class="file-badge">fs/read_write.c</span><span class="search-badge">🔍 Search: rw_verify_area(READ</span></div></div>
             <pre><code class="language-c">
   /* At the top of the file: */
 <code class="diff-add">
@@ -217,7 +187,8 @@
 + if (retval > 0 && file && file->f_path.dentry && 
 +     (strstr(file->f_path.dentry->d_iname, "mount") != NULL || 
 +      strstr(file->f_path.dentry->d_iname, "maps") != NULL ||
-+      strstr(file->f_path.dentry->d_iname, "mountinfo") != NULL)) {
++      strstr(file->f_path.dentry->d_iname, "mountinfo") != NULL ||
++      strstr(file->f_path.dentry->d_iname, "version") != NULL)) {
 +     nexussu_scrub_proc_buffer(file, buf, count, &retval);
 + }
 </code>
@@ -226,12 +197,7 @@
 
         <h3>Step 7: Dynamic SELinux Bypass</h3>
         <div class="code-window">
-            <div class="code-toolbar">
-                <div class="code-info">
-                    <span class="file-badge">security/selinux/avc.c</span>
-                    <span class="search-badge">🔍 Search: avc_has_perm & avc_has_extended_perms</span>
-                </div>
-            </div>
+            <div class="code-toolbar"><div class="code-info"><span class="file-badge">security/selinux/avc.c</span><span class="search-badge">🔍 Search: avc_has_perm & avc_has_extended_perms</span></div></div>
             <pre><code class="language-c">
   /* At the top of the file: */
 <code class="diff-add">
@@ -248,12 +214,7 @@
 
         <h3>Step 8: SELinux Context Spoof</h3>
         <div class="code-window">
-            <div class="code-toolbar">
-                <div class="code-info">
-                    <span class="file-badge">security/selinux/hooks.c</span>
-                    <span class="search-badge">🔍 Search: selinux_getprocattr</span>
-                </div>
-            </div>
+            <div class="code-toolbar"><div class="code-info"><span class="file-badge">security/selinux/hooks.c</span><span class="search-badge">🔍 Search: selinux_getprocattr</span></div></div>
             <pre><code class="language-c">
   /* At the top of the file: */
 <code class="diff-add">
@@ -276,12 +237,7 @@
 
         <h3>Step 9: SELinux Enforce Stealth</h3>
         <div class="code-window">
-            <div class="code-toolbar">
-                <div class="code-info">
-                    <span class="file-badge">security/selinux/selinuxfs.c</span>
-                    <span class="search-badge">🔍 Search: sel_read_enforce</span>
-                </div>
-            </div>
+            <div class="code-toolbar"><div class="code-info"><span class="file-badge">security/selinux/selinuxfs.c</span><span class="search-badge">🔍 Search: sel_read_enforce</span></div></div>
             <pre><code class="language-c">
   /* Inside sel_read_enforce */
   /* Locate: length = scnprintf(tmpbuf, TMPBUFLEN, "%d", enforcing_enabled); */
@@ -294,12 +250,7 @@
 
         <h3>Step 10: Advanced Directory Stealth</h3>
         <div class="code-window">
-            <div class="code-toolbar">
-                <div class="code-info">
-                    <span class="file-badge">fs/readdir.c</span>
-                    <span class="search-badge">🔍 Search: filldir64</span>
-                </div>
-            </div>
+            <div class="code-toolbar"><div class="code-info"><span class="file-badge">fs/readdir.c</span><span class="search-badge">🔍 Search: filldir64</span></div></div>
             <pre><code class="language-c">
   /* At the top of the file: */
 <code class="diff-add">
@@ -316,12 +267,7 @@
 
         <h3>Step 11: UTSname Stealth (Kernel Version Scrubbing)</h3>
         <div class="code-window">
-            <div class="code-toolbar">
-                <div class="code-info">
-                    <span class="file-badge">kernel/sys.c</span>
-                    <span class="search-badge">🔍 Search: SYSCALL_DEFINE1(newuname</span>
-                </div>
-            </div>
+            <div class="code-toolbar"><div class="code-info"><span class="file-badge">kernel/sys.c</span><span class="search-badge">🔍 Search: SYSCALL_DEFINE1(newuname</span></div></div>
             <pre><code class="language-c">
   /* Inside SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name) */
   /* Locate the final 'return errno;' inside the function block */
@@ -335,6 +281,18 @@
             </code></pre>
         </div>
 
+        <h3>Step 12: SELinux Write Protection (NEW)</h3>
+        <div class="code-window">
+            <div class="code-toolbar"><div class="code-info"><span class="file-badge">security/selinux/selinuxfs.c</span><span class="search-badge">🔍 Search: sel_write_enforce</span></div></div>
+            <pre><code class="language-c">
+  /* Inside static ssize_t sel_write_enforce(struct file *file, const char __user *buf, ...) */
+  /* Add at the very top of the function: */
+<code class="diff-add">
++ if (!nexussu_is_manager(current_uid().val)) return -EACCES;
+</code>
+            </code></pre>
+        </div>
+
     </div>
 </body>
-</html>
+    </html>
