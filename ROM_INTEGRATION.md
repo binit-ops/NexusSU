@@ -21,9 +21,13 @@ Because the kernel allowlist resets on reboot, you must add an init script to re
 ```rc
 # NexusSU Boot Script
 on early-init
-    # 1. Mount su binary
+    # 1. Mount su binary to all standard paths
     mkdir /data/adb/nexussu/bin
     mount --bind /data/adb/nexussu/bin/su /system/bin/su
+    mkdir /system/xbin
+    mount --bind /data/adb/nexussu/bin/su /system/xbin/su
+    mkdir /system/sbin
+    mount --bind /data/adb/nexussu/bin/su /system/sbin/su
 
     # 2. Mount Systemless Hosts (if enabled by user)
     mount --bind /data/adb/nexussu/hosts /system/etc/hosts
@@ -34,9 +38,12 @@ on early-init
     # 4. Execute post-fs-data.sh scripts for active modules
     exec - root root -- /system/bin/sh -c "if [ ! -f /data/adb/nexussu/safemode ]; then for dir in /data/adb/nexussu/modules/*; do if [ -f \$dir/post-fs-data.sh ] && [ ! -f \$dir/disable ]; then chmod 0755 \$dir/post-fs-data.sh; sh \$dir/post-fs-data.sh; fi; done; fi"
 
-# Run the boot daemon to re-apply root grants and execute service.sh scripts
-on property:sys.boot_completed=1
-    exec - root root -- /data/adb/nexussu/bin/nexussu_daemon
+# Run the boot daemon as a background service so it doesn't block boot
+service nexussu_daemon /data/adb/nexussu/bin/nexussu_daemon
+    user root
+    group root
+    seclabel u:r:su:s0
+    oneshot
 ```
 
 ## 3. Include the Init Script in your Build
