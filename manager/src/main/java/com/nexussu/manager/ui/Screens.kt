@@ -145,7 +145,8 @@ fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
     var isRootAvailable by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        isRootAvailable = RootShell.isRootAvailable()
+        // FIX: Use isKernelActive to prevent UI freeze/dialog popups
+        isRootAvailable = NexusEngine.isKernelActive()
         if (isRootAvailable) {
             kernelVersion = RootShell.getKernelVersion()
             selinuxStatus = RootShell.getSelinuxStatus()
