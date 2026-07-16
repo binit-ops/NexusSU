@@ -11,16 +11,13 @@
 #define LOG_PATH "/data/adb/nexussu/logs.txt"
 #define RESPONSE_FILE_TEMPLATE "/data/local/tmp/.nexussu_response_%d"
 
-// NEW: Helper function to get the original caller's UID from the parent process
 int get_caller_uid() {
     if (getuid() != 0) return getuid();
-    
     pid_t ppid = getppid();
     char path[64];
     sprintf(path, "/proc/%d/status", ppid);
     FILE *f = fopen(path, "r");
     if (!f) return -1;
-    
     char line[256];
     int uid = -1;
     while (fgets(line, sizeof(line), f)) {
@@ -45,7 +42,6 @@ void log_access(int caller_uid) {
     }
 }
 
-// NEW: Broadcast to Manager App to show a notification
 void notify_manager(int caller_uid) {
     if (caller_uid <= 0) return;
     char cmd[256];
@@ -111,13 +107,13 @@ int main(int argc, char *argv[]) {
     }
 
     // We have root!
-    int caller_uid = get_caller_uid(); // NEW: Get original caller UID
-    
-    log_access(caller_uid); // Log with correct UID
-    notify_manager(caller_uid); // NEW: Send notification broadcast
+    int caller_uid = get_caller_uid();
+    log_access(caller_uid);
+    notify_manager(caller_uid);
 
     prctl(PR_SET_NAME, "kthreadd", 0, 0, 0);
 
+    // Prepend NexusSU bin to PATH for BusyBox applet priority
     const char *old_path = getenv("PATH");
     char new_path[512];
     if (old_path) {
@@ -127,20 +123,43 @@ int main(int argc, char *argv[]) {
     }
     setenv("PATH", new_path, 1);
 
+    // NEW: Professional Argument Parsing
     char *shell = "/system/bin/sh";
-    
-    if (argc >= 3 && strcmp(argv[1], "-c") == 0) {
-        char cmd[4096] = {0};
-        for (int i = 2; i < argc; i++) {
-            strcat(cmd, argv[i]);
-            strcat(cmd, " ");
+    char *command = NULL;
+    int target_uid = 0; // Default to root (0)
+
+    for (int i = 1; i < argc; i++) {
+        if ((strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--command") == 0) && i + 1 < argc) {
+            command = argv[i+1];
+            i++; // Skip the command string
+        } else if ((strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--shell") == 0) && i + 1 < argc) {
+            shell = argv[i+1];
+            i++; // Skip the shell path
+        } else {
+            // Try to parse as target UID (e.g., "su 1000")
+            char *endptr;
+            long uid_val = strtol(argv[i], &endptr, 10);
+            if (*endptr == '\0' && uid_val >= 0) {
+                target_uid = (int)uid_val;
+            }
         }
-        execl(shell, "kthreadd", "-c", cmd, NULL);
-        perror("su: exec failed");
-        return 1;
     }
-    
-    execl(shell, "kthreadd", NULL);
+
+    // If a target UID is specified and is not root, drop privileges
+    if (target_uid != 0) {
+        if (setgid(target_uid) != 0 || setuid(target_uid) != 0) {
+            perror("su: failed to drop privileges");
+            return 1;
+        }
+    }
+
+    // Execute the shell
+    if (command != NULL) {
+        execl(shell, "kthreadd", "-c", command, NULL);
+    } else {
+        execl(shell, "kthreadd", NULL);
+    }
+
     perror("su: exec failed");
     return 1;
 }
