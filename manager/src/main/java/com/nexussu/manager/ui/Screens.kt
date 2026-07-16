@@ -401,7 +401,8 @@ fun LogScreen() {
 }
 
 // ---------- Module ----------
-data class ModuleItem(val id: String, val initial: String, val name: String, val desc: String, val enabled: Boolean)
+// UPDATED: Added 'version' and 'author' fields
+data class ModuleItem(val id: String, val initial: String, val name: String, val version: String, val author: String, val desc: String, val enabled: Boolean)
 
 @Composable
 fun ModuleScreen() {
@@ -455,10 +456,16 @@ fun ModuleScreen() {
                 Column {
                     modules.forEachIndexed { i, m ->
                         Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(Brush.linearGradient(listOf(p.accent, p.accent2))), contentAlignment = Alignment.Center) { Text(m.initial, color = Color(0xFF0A0E14), fontWeight = FontWeight.SemiBold) }
+                            Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(Brush.linearGradient(listOf(p.accent, p.accent2))), contentAlignment = Alignment.Center) { 
+                                Text(m.initial, color = Color(0xFF0A0E14), fontWeight = FontWeight.SemiBold) 
+                            }
                             Column(Modifier.weight(1f)) {
-                                Text(m.name, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
-                                Text(m.desc, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
+                                Text(m.name, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                
+                                // NEW: Display Version and Author
+                                Text("v${m.version} by ${m.author}", color = p.dim, fontSize = 9.sp, fontFamily = MonoFont, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                
+                                Text(m.desc, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                             Text(
                                 text = "Uninstall",
@@ -482,7 +489,7 @@ fun ModuleScreen() {
                 }
             }
         }
-
+        
         OutlinedButton(
             onClick = { 
                 scope.launch(Dispatchers.IO) {
