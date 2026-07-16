@@ -72,7 +72,6 @@ sed -i '/static int filldir64(struct dir_context \*ctx, const char \*name, int n
 
 # Step 11: UTSname Stealth (Kernel Version Scrubbing)
 echo "[*] Step 11: Patching kernel/sys.c (uname scrubbing)..."
-# Inject the scrub call right before 'return errno;' inside the newuname function block
 sed -i '/SYSCALL_DEFINE1(newuname, struct new_utsname __user \*, name)/,/^}/ s/return errno;/if (errno == 0) { nexussu_scrub_utsname(name); } return errno;/' $KERNEL_DIR/kernel/sys.c
 
 echo "[+] NexusSU Professional Hooks applied successfully!"
