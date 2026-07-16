@@ -1,23 +1,14 @@
 #!/bin/bash
 # NexusSU Professional Kernel Patcher
-# Usage: ./apply.sh /path/to/kernel/source
 
 KERNEL_DIR=$1
-
-if [ -z "$KERNEL_DIR" ]; then
-    echo "Usage: ./apply.sh /path/to/kernel/source"
-    exit 1
-fi
-
-if [ ! -d "$KERNEL_DIR/fs" ]; then
-    echo "Error: $KERNEL_DIR does not appear to be a valid kernel source tree."
-    exit 1
-fi
+if [ -z "$KERNEL_DIR" ]; then echo "Usage: ./apply.sh /path/to/kernel/source"; exit 1; fi
+if [ ! -d "$KERNEL_DIR/fs" ]; then echo "Error: Invalid kernel tree."; exit 1; fi
 
 echo "[*] Applying NexusSU Professional Hooks to $KERNEL_DIR..."
 
 # Step 1: Add Core Engine Files
-echo "[*] Step 1: Copying core files and updating Makefiles..."
+echo "[*] Step 1: Copying core files..."
 cp include_linux_nexussu.h $KERNEL_DIR/include/linux/nexussu.h
 cp kernel_nexussu_state.c $KERNEL_DIR/kernel/nexussu_state.c
 echo 'obj-y += nexussu_state.o' >> $KERNEL_DIR/kernel/Makefile
@@ -28,24 +19,24 @@ sed -i '/volatile long state;/a\	bool nexussu_granted;' $KERNEL_DIR/include/linu
 
 # Step 3: prctl Syscall Hook
 echo "[*] Step 3: Patching kernel/sys.c (prctl hook)..."
-sed -i '/^SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,/a\	if (option == 0x4E535553) { if (arg2 == 5) { nexussu_set_manager_uid(current_uid().val); return 0; } if (!nexussu_is_manager(current_uid().val)) return -EPERM; switch (arg2) { case 1: nexussu_add_trusted_uid((uid_t)arg3); return 0; case 2: nexussu_revoke_trusted_uid((uid_t)arg3); return 0; case 3: nexussu_escalate(); return 0; case 4: return 100; case 6: nexussu_add_deny_uid((uid_t)arg3); return 0; case 7: nexussu_remove_deny_uid((uid_t)arg3); return 0; default: return -EINVAL; } }' $KERNEL_DIR/kernel/sys.c
+sed -i '/^SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,/a\	if (option == 0x4E535553) { if (arg2 == 5) { nexussu_set_manager_uid(current_uid().val); return 0; } if (!nexussu_is_manager(current_uid().val)) return -EPERM; switch (arg2) { case 1: nexussu_add_trusted_uid((uid_t)arg3); return 0; case 2: nexussu_revoke_trusted_uid((uid_t)arg3); return 0; case 3: nexussu_escalate(); return 0; case 4: return 100; case 6: nexussu_add_deny_uid((uid_t)arg3); return 0; case 7: nexussu_remove_deny_uid((uid_t)arg3); return 0; case 8: return nexussu_wait_for_deny_pid(); default: return -EINVAL; } }' $KERNEL_DIR/kernel/sys.c
 sed -i '/#include <linux\/syscalls.h>/a #include <linux/nexussu.h>' $KERNEL_DIR/kernel/sys.c
 
-# Step 4: Execution Interception & Denylist
+# Step 4: Execution Interception & Denylist Reporting
 echo "[*] Step 4: Patching fs/exec.c..."
-sed -i '/retval = prepare_bprm_creds(bprm);/a\	if (nexussu_is_denied(current_uid())) return -EACCES; if (nexussu_is_granted(current_uid())) { nexussu_escalate(); bprm->secureexec = 1; }' $KERNEL_DIR/fs/exec.c
+# FIX: Only block 'su' for denylist. For other apps, report PID to daemon.
+sed -i '/retval = prepare_bprm_creds(bprm);/a\	if (nexussu_is_denied(current_uid())) { if (nexussu_stealth_check(bprm->filename)) return -EACCES; nexussu_report_deny_exec(getpid()); } if (nexussu_is_granted(current_uid())) { nexussu_escalate(); bprm->secureexec = 1; }' $KERNEL_DIR/fs/exec.c
 sed -i '/#include <linux\/binfmts.h>/a #include <linux/nexussu.h>' $KERNEL_DIR/fs/exec.c
 
-# Step 5: Advanced VFS Stealth (open.c & stat.c)
+# Step 5: Advanced VFS Stealth
 echo "[*] Step 5: Patching fs/open.c and fs/stat.c..."
 sed -i '/^SYSCALL_DEFINE3(do_faccessat, int, dfd, const char __user \*, filename, int, mode)/a\	if (nexussu_stealth_check(filename)) return -ENOENT;' $KERNEL_DIR/fs/open.c
 sed -i '/^SYSCALL_DEFINE4(faccessat2, int, dfd, const char __user \*, filename, int, mode, int, flag)/a\	if (nexussu_stealth_check(filename)) return -ENOENT;' $KERNEL_DIR/fs/open.c
 sed -i '/#include <linux\/fs.h>/a #include <linux/nexussu.h>' $KERNEL_DIR/fs/open.c
-
 sed -i '/^int vfs_statx(int dfd, const char __user \*filename, int flags, struct kstat \*stat, u32 request_mask)/a\	if (nexussu_stealth_check(filename)) return -ENOENT;' $KERNEL_DIR/fs/stat.c
 sed -i '/#include <linux\/fs.h>/a #include <linux/nexussu.h>' $KERNEL_DIR/fs/stat.c
 
-# Step 6: Procfs Scrubbing (mounts, maps, mountinfo, version)
+# Step 6: Procfs Scrubbing
 echo "[*] Step 6: Patching fs/read_write.c..."
 sed -i 's/retval = rw_verify_area(READ, file, pos, count);/retval = rw_verify_area(READ, file, pos, count); if (retval > 0 \&\& file \&\& file->f_path.dentry \&\& (strstr(file->f_path.dentry->d_iname, "mount") != NULL || strstr(file->f_path.dentry->d_iname, "maps") != NULL || strstr(file->f_path.dentry->d_iname, "mountinfo") != NULL || strstr(file->f_path.dentry->d_iname, "version") != NULL)) { nexussu_scrub_proc_buffer(file, buf, count, \&retval); }/' $KERNEL_DIR/fs/read_write.c
 sed -i '/#include <linux\/fs.h>/a #include <linux/nexussu.h>\n#include <linux/string.h>' $KERNEL_DIR/fs/read_write.c
@@ -66,15 +57,15 @@ echo "[*] Step 9: Patching security/selinux/selinuxfs.c..."
 sed -i 's/length = scnprintf(tmpbuf, TMPBUFLEN, "%d", enforcing_enabled);/length = scnprintf(tmpbuf, TMPBUFLEN, "%d", 1);/' $KERNEL_DIR/security/selinux/selinuxfs.c
 
 # Step 10: Advanced Directory Stealth
-echo "[*] Step 10: Patching fs/readdir.c (Hiding /data/adb)..."
+echo "[*] Step 10: Patching fs/readdir.c..."
 sed -i '/#include <linux\/fs.h>/a #include <linux/nexussu.h>' $KERNEL_DIR/fs/readdir.c
 sed -i '/static int filldir64(struct dir_context \*ctx, const char \*name, int namlen,/a\	if (nexussu_hide_dir_check(name, namlen)) return 0;' $KERNEL_DIR/fs/readdir.c
 
-# Step 11: UTSname Stealth (Kernel Version Scrubbing)
+# Step 11: UTSname Stealth
 echo "[*] Step 11: Patching kernel/sys.c (uname scrubbing)..."
 sed -i '/SYSCALL_DEFINE1(newuname, struct new_utsname __user \*, name)/,/^}/ s/return errno;/if (errno == 0) { nexussu_scrub_utsname(name); } return errno;/' $KERNEL_DIR/kernel/sys.c
 
-# Step 12: SELinux Write Protection (NEW)
+# Step 12: SELinux Write Protection
 echo "[*] Step 12: Patching security/selinux/selinuxfs.c (Block SELinux disabling)..."
 sed -i '/static ssize_t sel_write_enforce(struct file \*file, const char __user \*buf,/a\	if (!nexussu_is_manager(current_uid().val)) return -EACCES;' $KERNEL_DIR/security/selinux/selinuxfs.c
 
