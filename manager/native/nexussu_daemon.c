@@ -57,7 +57,6 @@ void execute_module_scripts() {
     closedir(dir);
 }
 
-// NEW: Apply Magisk module system.prop files
 void apply_module_props() {
     DIR *dir = opendir(MODULES_DIR);
     if (!dir) return;
@@ -82,13 +81,9 @@ void apply_module_props() {
             
             char line[512];
             while (fgets(line, sizeof(line), prop_file)) {
-                // Skip comments and empty lines
                 if (line[0] == '#' || line[0] == '\n') continue;
-                
-                // Remove trailing newline
                 line[strcspn(line, "\n")] = 0;
                 
-                // Execute setprop in the background
                 char cmd[1024];
                 snprintf(cmd, sizeof(cmd), "setprop %s >/dev/null 2>&1 &", line);
                 system(cmd);
@@ -99,7 +94,6 @@ void apply_module_props() {
     closedir(dir);
 }
 
-// MagiskHide Style Mount Namespace Isolation
 void isolate_denylist() {
     FILE *deny_file = fopen(DENYLIST_PATH, "r");
     if (!deny_file) return;
@@ -162,6 +156,16 @@ void isolate_denylist() {
 }
 
 int main() {
+    // NEW: Inject NexusSU bin into PATH so module scripts use BusyBox
+    const char *old_path = getenv("PATH");
+    char new_path[512];
+    if (old_path) {
+        snprintf(new_path, sizeof(new_path), "/data/adb/nexussu/bin:%s", old_path);
+    } else {
+        snprintf(new_path, sizeof(new_path), "/data/adb/nexussu/bin:/system/bin:/system/xbin:/vendor/bin");
+    }
+    setenv("PATH", new_path, 1);
+
     // Register as manager and escalate to get MAC bypass
     prctl(NEXUSSU_PRCTL_MAGIC, CMD_REGISTER_MANAGER, 0, 0, 0);
     prctl(NEXUSSU_PRCTL_MAGIC, CMD_ESCALATE_SELF, 0, 0, 0);
@@ -172,7 +176,7 @@ int main() {
     // 2. Execute all active module service.sh scripts
     execute_module_scripts();
     
-    // 3. NEW: Apply all active module system.prop files
+    // 3. Apply all active module system.prop files
     apply_module_props();
     
     // 4. Background loop to isolate denylisted apps (MagiskHide)
