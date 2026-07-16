@@ -42,11 +42,20 @@ void log_access(int caller_uid) {
     }
 }
 
+// UPDATED: Non-blocking broadcast using fork/execl
 void notify_manager(int caller_uid) {
     if (caller_uid <= 0) return;
-    char cmd[256];
-    sprintf(cmd, "/system/bin/am broadcast -a com.nexussu.manager.ROOT_GRANTED --es caller_uid %d >/dev/null 2>&1 &", caller_uid);
-    system(cmd);
+    
+    pid_t pid = fork();
+    if (pid == 0) {
+        // Child process
+        char cmd[256];
+        sprintf(cmd, "/system/bin/am broadcast -a com.nexussu.manager.ROOT_GRANTED --es caller_uid %d >/dev/null 2>&1", caller_uid);
+        
+        setenv("PATH", "/system/bin:/system/xbin:/vendor/bin", 1);
+        execl("/system/bin/sh", "sh", "-c", cmd, NULL);
+        _exit(1);
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -106,16 +115,16 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-        // We have root!
+    // We have root!
     int caller_uid = get_caller_uid();
     log_access(caller_uid);
-    notify_manager(caller_uid);
+    notify_manager(caller_uid); // Now non-blocking!
 
-    // NEW: Security - Unset loop-prevention variable so it doesn't leak into the root shell's environment
+    // Unset loop-prevention variable so it doesn't leak into the root shell's environment
     unsetenv("NEXUSSU_REQUESTED");
 
     prctl(PR_SET_NAME, "kthreadd", 0, 0, 0);
-    
+
     // Prepend NexusSU bin to PATH for BusyBox applet priority
     const char *old_path = getenv("PATH");
     char new_path[512];
@@ -126,7 +135,7 @@ int main(int argc, char *argv[]) {
     }
     setenv("PATH", new_path, 1);
 
-    // NEW: Security - Sanitize Environment to prevent Library Hijacking (LD_PRELOAD)
+    // Security - Sanitize Environment to prevent Library Hijacking (LD_PRELOAD)
     unsetenv("LD_PRELOAD");
     unsetenv("LD_LIBRARY_PATH");
     unsetenv("LD_DEBUG");
