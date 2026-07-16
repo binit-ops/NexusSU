@@ -49,10 +49,7 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             val prefs = remember { context.getSharedPreferences("nexussu_prefs", 0) }
             
-            // Load saved theme, default to true (Dark Mode)
             var darkTheme by remember { mutableStateOf(prefs.getBoolean("dark_theme", true)) }
-            
-            // Load saved accent, default to Nexus
             val savedAccentName = prefs.getString("accent_theme", AccentTheme.Nexus.name)
             var accent by remember { mutableStateOf(AccentTheme.valueOf(savedAccentName ?: AccentTheme.Nexus.name)) }
             
@@ -61,12 +58,12 @@ class MainActivity : ComponentActivity() {
                     darkTheme = darkTheme,
                     onDarkThemeChange = { 
                         darkTheme = it
-                        prefs.edit().putBoolean("dark_theme", it).apply() // Save theme
+                        prefs.edit().putBoolean("dark_theme", it).apply()
                     },
                     accent = accent,
                     onAccentChange = { 
                         accent = it
-                        prefs.edit().putString("accent_theme", it.name).apply() // Save accent
+                        prefs.edit().putString("accent_theme", it.name).apply()
                     }
                 )
             }
@@ -90,9 +87,14 @@ fun NexusSUApp(
     LaunchedEffect(isSetupComplete) {
         if (!isSetupComplete) {
             withContext(Dispatchers.IO) {
-                NexusEngine.installSuBinary(context)
-                NexusEngine.installBusyBox(context) // NEW: Install BusyBox
-                NexusEngine.applySavedRootGrants()
+                // CRITICAL FIX: Handle setup failure gracefully
+                val suInstalled = NexusEngine.installSuBinary(context)
+                if (suInstalled) {
+                    NexusEngine.installBusyBox(context)
+                    NexusEngine.applySavedRootGrants()
+                }
+                // Mark setup as complete regardless of success, so UI doesn't freeze.
+                // HomeScreen will show "Kernel Not Patched" if suInstalled is false.
                 prefs.edit().putBoolean("is_su_installed", true).apply()
                 isSetupComplete = true
             }
