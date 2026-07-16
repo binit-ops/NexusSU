@@ -402,8 +402,8 @@ fun LogScreen() {
 }
 
 // ---------- Module ----------
-// UPDATED: Added 'version' and 'author' fields
-data class ModuleItem(val id: String, val initial: String, val name: String, val version: String, val author: String, val desc: String, val enabled: Boolean)
+// UPDATED: Added 'versionCode' and 'updateJson' fields
+data class ModuleItem(val id: String, val initial: String, val name: String, val version: String, val versionCode: Int, val author: String, val desc: String, val updateJson: String, val enabled: Boolean)
 
 @Composable
 fun ModuleScreen() {
@@ -414,6 +414,10 @@ fun ModuleScreen() {
     var isInstalling by remember { mutableStateOf(false) }
     var showInstallLog by remember { mutableStateOf(false) }
     var installLogContent by remember { mutableStateOf("") }
+    
+    // NEW: Module update tracking
+    val moduleUpdates = remember { mutableStateMapOf<String, String>() } // module id -> zipUrl
+    var isCheckingUpdates by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
@@ -421,6 +425,20 @@ fun ModuleScreen() {
             withContext(Dispatchers.Main) {
                 modules.clear(); modules.addAll(installed)
             }
+            
+            // NEW: Check for module updates in background
+            isCheckingUpdates = true
+            installed.forEach { module ->
+                if (module.updateJson.isNotBlank()) {
+                    val update = NexusEngine.checkModuleUpdate(module.updateJson)
+                    if (update != null && update.versionCode > module.versionCode) {
+                        withContext(Dispatchers.Main) {
+                            moduleUpdates[module.id] = update.zipUrl
+                        }
+                    }
+                }
+            }
+            withContext(Dispatchers.Main) { isCheckingUpdates = false }
         }
     }
 
@@ -462,12 +480,54 @@ fun ModuleScreen() {
                             }
                             Column(Modifier.weight(1f)) {
                                 Text(m.name, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                
-                                // NEW: Display Version and Author
                                 Text("v${m.version} by ${m.author}", color = p.dim, fontSize = 9.sp, fontFamily = MonoFont, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                
                                 Text(m.desc, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
+                            
+                            // NEW: Update button if update is available
+                            if (moduleUpdates.containsKey(m.id)) {
+                                Text(
+                                    text = "Update",
+                                    color = p.accent,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.clickable(remember { MutableInteractionSource() }, indication = null) {
+                                        val zipUrl = moduleUpdates[m.id] ?: return@clickable
+                                        isInstalling = true
+                                        scope.launch(Dispatchers.IO) {
+                                            // Download the update ZIP
+                                            val cacheFile = File(context.cacheDir, "module_update.zip")
+                                            try {
+                                                val url = java.net.URL(zipUrl)
+                                                val conn = url.openConnection() as java.net.HttpURLConnection
+                                                conn.connect()
+                                                java.io.FileOutputStream(cacheFile).use { output -> conn.inputStream.copyTo(output) }
+                                                
+                                                // Install it
+                                                val success = RootShell.installModule(cacheFile.absolutePath)
+                                                cacheFile.delete()
+                                                
+                                                withContext(Dispatchers.Main) {
+                                                    isInstalling = false
+                                                    if (success) {
+                                                        Toast.makeText(context, "Module updated!", Toast.LENGTH_SHORT).show()
+                                                        moduleUpdates.remove(m.id)
+                                                        modules.clear(); modules.addAll(NexusEngine.getInstalledModules())
+                                                    } else {
+                                                        Toast.makeText(context, "Update failed.", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            } catch (e: Exception) {
+                                                withContext(Dispatchers.Main) {
+                                                    isInstalling = false
+                                                    Toast.makeText(context, "Download failed.", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        }
+                                    }.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                            
                             Text(
                                 text = "Uninstall",
                                 color = p.dim,
@@ -525,8 +585,8 @@ fun ModuleScreen() {
             textContentColor = p.accent
         )
     }
-}
-
+}                                
+                                
 // ---------- Settings ----------
 @Composable
 fun SettingsScreen(
