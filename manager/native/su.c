@@ -106,13 +106,16 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // We have root!
+        // We have root!
     int caller_uid = get_caller_uid();
     log_access(caller_uid);
     notify_manager(caller_uid);
 
-    prctl(PR_SET_NAME, "kthreadd", 0, 0, 0);
+    // NEW: Security - Unset loop-prevention variable so it doesn't leak into the root shell's environment
+    unsetenv("NEXUSSU_REQUESTED");
 
+    prctl(PR_SET_NAME, "kthreadd", 0, 0, 0);
+    
     // Prepend NexusSU bin to PATH for BusyBox applet priority
     const char *old_path = getenv("PATH");
     char new_path[512];
