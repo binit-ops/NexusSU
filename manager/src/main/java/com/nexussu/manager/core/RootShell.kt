@@ -25,8 +25,6 @@ object RootShell {
     fun isRootAvailable(): Boolean = executeBoolean("id")
     fun getKernelVersion(): String = execute("uname -r")
     fun getSelinuxStatus(): String = execute("getenforce")
-
-        // NEW: Get real Verified Boot state
     fun getVerifiedBootState(): String {
         val state = execute("getprop ro.boot.verifiedbootstate").trim()
         return when (state) {
@@ -83,7 +81,6 @@ object RootShell {
                 if [ -f $MODPATH/customize.sh ]; then
                     chmod 0755 $MODPATH/customize.sh
                     echo "Executing customize.sh..." >> $LOGFILE
-                    # Provide a dummy ui_print function so scripts don't crash
                     ui_print() { echo "[UI] $1" >> $LOGFILE; }
                     export -f ui_print
                     sh $MODPATH/customize.sh >> $LOGFILE 2>&1
@@ -93,8 +90,8 @@ object RootShell {
                     sh $MODPATH/install.sh >> $LOGFILE 2>&1
                 fi
                 
-                # Mount the system files if installation was successful
-                if [ -d $MODPATH/system ]; then
+                # NEW: Mount the system files if installation was successful AND skip_mount is NOT present
+                if [ -d $MODPATH/system ] && [ ! -f $MODPATH/skip_mount ]; then
                     find $MODPATH/system -type f | while read file; do
                         target_path="/system${'$'}{file#$MODPATH/system}"
                         mkdir -p ${'$'}(dirname ${'$'}target_path)
@@ -116,7 +113,8 @@ object RootShell {
         val cmd = if (enabled) {
             """
             rm -f $basePath/disable
-            if [ -d $basePath/system ]; then
+            # NEW: Only mount if skip_mount is NOT present
+            if [ -d $basePath/system ] && [ ! -f $basePath/skip_mount ]; then
                 find $basePath/system -type f | while read file; do
                     target_path="/system\${file#$basePath/system}"
                     mkdir -p \$(dirname \$target_path)
@@ -140,10 +138,14 @@ object RootShell {
         return execute(cmd).contains("SUCCESS")
     }
 
-    // NEW: Delete Module Logic
+    // NEW: Run uninstall.sh before deleting
     fun deleteModule(id: String): Boolean {
         val basePath = "/data/adb/nexussu/modules/$id"
         val cmd = """
+            if [ -f $basePath/uninstall.sh ]; then
+                chmod 0755 $basePath/uninstall.sh
+                sh $basePath/uninstall.sh
+            fi
             if [ -d $basePath/system ]; then
                 find $basePath/system -type f | while read file; do
                     target_path="/system\${file#$basePath/system}"
