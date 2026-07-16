@@ -1,6 +1,10 @@
 # Keep Nexus Engine JNI Bridge (Prevents R8 from renaming C++ function names)
 -keep class com.nexussu.manager.core.NexusEngine { *; }
 
+# NEW: Keep Activities and Receivers launched via "am" from native code
+-keep class com.nexussu.manager.SuRequestActivity { *; }
+-keep class com.nexussu.manager.core.RootGrantedReceiver { *; }
+
 # Keep Room Database Entities and DAOs
 -keep class com.nexussu.manager.data.** { *; }
 
