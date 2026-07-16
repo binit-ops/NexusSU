@@ -66,6 +66,7 @@ object NexusEngine {
         }
     }
 
+    // UPDATED: Installs binary, creates applet symlinks, and mounts to /system/bin
     fun installBusyBox(context: Context): Boolean {
         try {
             val bbAsset = context.assets.open("busybox.bin")
@@ -75,7 +76,8 @@ object NexusEngine {
 
             val cmd = "sh -c \"cp ${bbFile.absolutePath} /data/adb/nexussu/bin/busybox && " +
                       "chmod 0755 /data/adb/nexussu/bin/busybox && " +
-                      "mount --bind /data/adb/nexussu/bin/busybox /system/bin/busybox\""
+                      "mount --bind /data/adb/nexussu/bin/busybox /system/bin/busybox && " +
+                      '/data/adb/nexussu/bin/busybox --install -s /data/adb/nexussu/bin\""
             
             val process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
             process.waitFor()
