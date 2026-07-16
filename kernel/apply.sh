@@ -47,7 +47,7 @@ sed -i '/#include <linux\/fs.h>/a #include <linux/nexussu.h>' $KERNEL_DIR/fs/sta
 
 # Step 6: Procfs Scrubbing
 echo "[*] Step 6: Patching fs/read_write.c..."
-sed -i 's/retval = rw_verify_area(READ, file, pos, count);/retval = rw_verify_area(READ, file, pos, count); if (retval > 0 \&\& file \&\& file->f_path.dentry \&\& (strstr(file->f_path.dentry->d_iname, "mount") != NULL || strstr(file->f_path.dentry->d_iname, "maps") != NULL)) { nexussu_scrub_proc_buffer(file, buf, count, \&retval); }/' $KERNEL_DIR/fs/read_write.c
+sed -i 's/retval = rw_verify_area(READ, file, pos, count);/retval = rw_verify_area(READ, file, pos, count); if (retval > 0 \&\& file \&\& file->f_path.dentry \&\& (strstr(file->f_path.dentry->d_iname, "mount") != NULL || strstr(file->f_path.dentry->d_iname, "maps") != NULL || strstr(file->f_path.dentry->d_iname, "mountinfo") != NULL)) { nexussu_scrub_proc_buffer(file, buf, count, \&retval); }/' $KERNEL_DIR/fs/read_write.c
 sed -i '/#include <linux\/fs.h>/a #include <linux/nexussu.h>\n#include <linux/string.h>' $KERNEL_DIR/fs/read_write.c
 
 # Step 7: Dynamic SELinux Bypass
