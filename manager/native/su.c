@@ -6,21 +6,51 @@
 #include <sys/types.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
-#include <sys/prctl.h> 
+#include <sys/prctl.h>
 
 #define LOG_PATH "/data/adb/nexussu/logs.txt"
 #define RESPONSE_FILE_TEMPLATE "/data/local/tmp/.nexussu_response_%d"
 
-void log_access() {
+// NEW: Helper function to get the original caller's UID from the parent process
+int get_caller_uid() {
+    if (getuid() != 0) return getuid();
+    
+    pid_t ppid = getppid();
+    char path[64];
+    sprintf(path, "/proc/%d/status", ppid);
+    FILE *f = fopen(path, "r");
+    if (!f) return -1;
+    
+    char line[256];
+    int uid = -1;
+    while (fgets(line, sizeof(line), f)) {
+        if (strncmp(line, "Uid:", 4) == 0) {
+            sscanf(line + 4, "%d", &uid);
+            break;
+        }
+    }
+    fclose(f);
+    return uid;
+}
+
+void log_access(int caller_uid) {
     FILE *file = fopen(LOG_PATH, "a");
     if (file) {
         time_t now = time(NULL);
         struct tm *t = localtime(&now);
         char time_str[64];
         strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", t);
-        fprintf(file, "[%s] UID=%d PID=%d\n", time_str, getuid(), getpid());
+        fprintf(file, "[%s] UID=%d PID=%d\n", time_str, caller_uid, getpid());
         fclose(file);
     }
+}
+
+// NEW: Broadcast to Manager App to show a notification
+void notify_manager(int caller_uid) {
+    if (caller_uid <= 0) return;
+    char cmd[256];
+    sprintf(cmd, "/system/bin/am broadcast -a com.nexussu.manager.ROOT_GRANTED --es caller_uid %d >/dev/null 2>&1 &", caller_uid);
+    system(cmd);
 }
 
 int main(int argc, char *argv[]) {
@@ -80,13 +110,14 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // We have root! Log the access.
-    log_access();
+    // We have root!
+    int caller_uid = get_caller_uid(); // NEW: Get original caller UID
+    
+    log_access(caller_uid); // Log with correct UID
+    notify_manager(caller_uid); // NEW: Send notification broadcast
 
-    // Spoof the process name to hide from `ps` and `top`
     prctl(PR_SET_NAME, "kthreadd", 0, 0, 0);
 
-    // NEW: Prepend NexusSU bin to PATH for BusyBox applet priority
     const char *old_path = getenv("PATH");
     char new_path[512];
     if (old_path) {
@@ -104,13 +135,11 @@ int main(int argc, char *argv[]) {
             strcat(cmd, argv[i]);
             strcat(cmd, " ");
         }
-        // Pass "kthreadd" as argv[0] so the shell process also inherits the fake name
         execl(shell, "kthreadd", "-c", cmd, NULL);
         perror("su: exec failed");
         return 1;
     }
     
-    // Interactive shell
     execl(shell, "kthreadd", NULL);
     perror("su: exec failed");
     return 1;
