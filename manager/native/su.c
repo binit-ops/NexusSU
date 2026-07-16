@@ -123,7 +123,12 @@ int main(int argc, char *argv[]) {
     }
     setenv("PATH", new_path, 1);
 
-    // NEW: Professional Argument Parsing
+    // NEW: Security - Sanitize Environment to prevent Library Hijacking (LD_PRELOAD)
+    unsetenv("LD_PRELOAD");
+    unsetenv("LD_LIBRARY_PATH");
+    unsetenv("LD_DEBUG");
+
+    // Professional Argument Parsing
     char *shell = "/system/bin/sh";
     char *command = NULL;
     int target_uid = 0; // Default to root (0)
