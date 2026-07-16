@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
@@ -42,13 +43,11 @@ void log_access(int caller_uid) {
     }
 }
 
-// UPDATED: Non-blocking broadcast using fork/execl
 void notify_manager(int caller_uid) {
     if (caller_uid <= 0) return;
     
     pid_t pid = fork();
     if (pid == 0) {
-        // Child process
         char cmd[256];
         sprintf(cmd, "/system/bin/am broadcast -a com.nexussu.manager.ROOT_GRANTED --es caller_uid %d >/dev/null 2>&1", caller_uid);
         
@@ -59,6 +58,9 @@ void notify_manager(int caller_uid) {
 }
 
 int main(int argc, char *argv[]) {
+    // NEW: Prevent zombie processes from background forks
+    signal(SIGCHLD, SIG_IGN);
+
     if (getuid() != 0) {
         if (getenv("NEXUSSU_REQUESTED") != NULL) {
             fprintf(stderr, "su: root access denied.\n");
@@ -118,14 +120,18 @@ int main(int argc, char *argv[]) {
     // We have root!
     int caller_uid = get_caller_uid();
     log_access(caller_uid);
-    notify_manager(caller_uid); // Now non-blocking!
+    notify_manager(caller_uid);
 
-    // Unset loop-prevention variable so it doesn't leak into the root shell's environment
     unsetenv("NEXUSSU_REQUESTED");
 
     prctl(PR_SET_NAME, "kthreadd", 0, 0, 0);
 
-    // Prepend NexusSU bin to PATH for BusyBox applet priority
+    // NEW: Inherit the parent's Working Directory so relative paths work
+    pid_t ppid = getppid();
+    char cwd_path[64];
+    sprintf(cwd_path, "/proc/%d/cwd", ppid);
+    chdir(cwd_path);
+
     const char *old_path = getenv("PATH");
     char new_path[512];
     if (old_path) {
@@ -135,25 +141,23 @@ int main(int argc, char *argv[]) {
     }
     setenv("PATH", new_path, 1);
 
-    // Security - Sanitize Environment to prevent Library Hijacking (LD_PRELOAD)
+    // Security - Sanitize Environment to prevent Library Hijacking
     unsetenv("LD_PRELOAD");
     unsetenv("LD_LIBRARY_PATH");
     unsetenv("LD_DEBUG");
 
-    // Professional Argument Parsing
     char *shell = "/system/bin/sh";
     char *command = NULL;
-    int target_uid = 0; // Default to root (0)
+    int target_uid = 0; 
 
     for (int i = 1; i < argc; i++) {
         if ((strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--command") == 0) && i + 1 < argc) {
             command = argv[i+1];
-            i++; // Skip the command string
+            i++;
         } else if ((strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--shell") == 0) && i + 1 < argc) {
             shell = argv[i+1];
-            i++; // Skip the shell path
+            i++;
         } else {
-            // Try to parse as target UID (e.g., "su 1000")
             char *endptr;
             long uid_val = strtol(argv[i], &endptr, 10);
             if (*endptr == '\0' && uid_val >= 0) {
@@ -162,7 +166,6 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // If a target UID is specified and is not root, drop privileges
     if (target_uid != 0) {
         if (setgid(target_uid) != 0 || setuid(target_uid) != 0) {
             perror("su: failed to drop privileges");
@@ -170,7 +173,6 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // Execute the shell
     if (command != NULL) {
         execl(shell, "kthreadd", "-c", command, NULL);
     } else {
