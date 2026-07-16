@@ -32,8 +32,8 @@ on early-init
     # 2. Mount Systemless Hosts (if enabled by user)
     mount --bind /data/adb/nexussu/hosts /system/etc/hosts
 
-    # 3. Mount all active modules (SKIP IF SAFE MODE IS ACTIVE)
-    exec - root root -- /system/bin/sh -c "if [ ! -f /data/adb/nexussu/safemode ]; then find /data/adb/nexussu/modules/*/system -type f | while read file; do target=$(echo $file | sed 's|/data/adb/nexussu/modules/[^/]*/system|/system|'); mount --bind $file $target; done; fi"
+    # 3. NEW: Mount all active modules (SKIP IF SAFE MODE IS ACTIVE OR skip_mount EXISTS)
+    exec - root root -- /system/bin/sh -c "if [ ! -f /data/adb/nexussu/safemode ]; then for dir in /data/adb/nexussu/modules/*; do if [ -f \$dir/disable ] || [ -f \$dir/skip_mount ]; then continue; fi; if [ -d \$dir/system ]; then find \$dir/system -type f | while read file; do target=$(echo \$file | sed 's|\$dir/system|/system|'); mount --bind \$file \$target; done; fi; done; fi"
 
     # 4. Execute post-fs-data.sh scripts for active modules
     exec - root root -- /system/bin/sh -c "if [ ! -f /data/adb/nexussu/safemode ]; then for dir in /data/adb/nexussu/modules/*; do if [ -f \$dir/post-fs-data.sh ] && [ ! -f \$dir/disable ]; then chmod 0755 \$dir/post-fs-data.sh; sh \$dir/post-fs-data.sh; fi; done; fi"
