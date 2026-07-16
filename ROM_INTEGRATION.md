@@ -20,7 +20,12 @@ Because the kernel allowlist resets on reboot, you must add an init script to re
 **File:** `device/oem/codename/init/init.nexussu.rc`
 ```rc
 # NexusSU Boot Script
-on early-init
+
+# Phase 1: post-fs-data (Data partition is decrypted here)
+on post-fs-data
+    # Skip everything if Safe Mode is active
+    if [ -f /data/adb/nexussu/safemode ]; then return 0; fi
+
     # 1. Mount su binary to all standard paths
     mkdir /data/adb/nexussu/bin
     mount --bind /data/adb/nexussu/bin/su /system/bin/su
@@ -32,13 +37,13 @@ on early-init
     # 2. Mount Systemless Hosts (if enabled by user)
     mount --bind /data/adb/nexussu/hosts /system/etc/hosts
 
-    # 3. NEW: Mount all active modules (SKIP IF SAFE MODE IS ACTIVE OR skip_mount EXISTS)
-    exec - root root -- /system/bin/sh -c "if [ ! -f /data/adb/nexussu/safemode ]; then for dir in /data/adb/nexussu/modules/*; do if [ -f \$dir/disable ] || [ -f \$dir/skip_mount ]; then continue; fi; if [ -d \$dir/system ]; then find \$dir/system -type f | while read file; do target=$(echo \$file | sed 's|\$dir/system|/system|'); mount --bind \$file \$target; done; fi; done; fi"
+    # 3. Mount all active modules (SKIP IF skip_mount EXISTS)
+    exec - root root -- /system/bin/sh -c "for dir in /data/adb/nexussu/modules/*; do if [ -f \$dir/disable ] || [ -f \$dir/skip_mount ]; then continue; fi; if [ -d \$dir/system ]; then find \$dir/system -type f | while read file; do target=$(echo \$file | sed 's|\$dir/system|/system|'); mount --bind \$file \$target; done; fi; done"
 
     # 4. Execute post-fs-data.sh scripts for active modules
-    exec - root root -- /system/bin/sh -c "if [ ! -f /data/adb/nexussu/safemode ]; then for dir in /data/adb/nexussu/modules/*; do if [ -f \$dir/post-fs-data.sh ] && [ ! -f \$dir/disable ]; then chmod 0755 \$dir/post-fs-data.sh; sh \$dir/post-fs-data.sh; fi; done; fi"
+    exec - root root -- /system/bin/sh -c "for dir in /data/adb/nexussu/modules/*; do if [ -f \$dir/disable ]; then continue; fi; if [ -f \$dir/post-fs-data.sh ]; then chmod 0755 \$dir/post-fs-data.sh; sh \$dir/post-fs-data.sh; fi; done"
 
-# Run the boot daemon as a background service so it doesn't block boot
+# Phase 2: boot (Zygote has started, safe to run background loops)
 service nexussu_daemon /data/adb/nexussu/bin/nexussu_daemon
     user root
     group root
