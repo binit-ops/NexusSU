@@ -195,7 +195,7 @@
             </code></pre>
         </div>
 
-        <h3>Step 6: Procfs Scrubbing</h3>
+                <h3>Step 6: Procfs Scrubbing</h3>
         <div class="code-window">
             <div class="code-toolbar">
                 <div class="code-info">
@@ -216,7 +216,8 @@
 + retval = rw_verify_area(READ, file, pos, count); 
 + if (retval > 0 && file && file->f_path.dentry && 
 +     (strstr(file->f_path.dentry->d_iname, "mount") != NULL || 
-+      strstr(file->f_path.dentry->d_iname, "maps") != NULL)) {
++      strstr(file->f_path.dentry->d_iname, "maps") != NULL ||
++      strstr(file->f_path.dentry->d_iname, "mountinfo") != NULL)) {
 +     nexussu_scrub_proc_buffer(file, buf, count, &retval);
 + }
 </code>
