@@ -9,6 +9,7 @@
 #define NEXUSSU_PRCTL_MAGIC 0x4E535553
 #define CMD_REGISTER_MANAGER 5
 #define CMD_GRANT_UID 1
+#define CMD_ESCALATE_SELF 3
 
 #define MODULES_DIR "/data/adb/nexussu/modules"
 #define DENYLIST_PATH "/data/adb/nexussu/denylist.txt"
@@ -56,7 +57,49 @@ void execute_module_scripts() {
     closedir(dir);
 }
 
-// NEW: MagiskHide Style Mount Namespace Isolation
+// NEW: Apply Magisk module system.prop files
+void apply_module_props() {
+    DIR *dir = opendir(MODULES_DIR);
+    if (!dir) return;
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] == '.') continue;
+
+        char module_path[512];
+        snprintf(module_path, sizeof(module_path), "%s/%s", MODULES_DIR, entry->d_name);
+
+        char disable_path[600];
+        snprintf(disable_path, sizeof(disable_path), "%s/disable", module_path);
+        if (access(disable_path, F_OK) == 0) continue;
+
+        char prop_path[600];
+        snprintf(prop_path, sizeof(prop_path), "%s/system.prop", module_path);
+        
+        if (access(prop_path, F_OK) == 0) {
+            FILE *prop_file = fopen(prop_path, "r");
+            if (!prop_file) continue;
+            
+            char line[512];
+            while (fgets(line, sizeof(line), prop_file)) {
+                // Skip comments and empty lines
+                if (line[0] == '#' || line[0] == '\n') continue;
+                
+                // Remove trailing newline
+                line[strcspn(line, "\n")] = 0;
+                
+                // Execute setprop in the background
+                char cmd[1024];
+                snprintf(cmd, sizeof(cmd), "setprop %s >/dev/null 2>&1 &", line);
+                system(cmd);
+            }
+            fclose(prop_file);
+        }
+    }
+    closedir(dir);
+}
+
+// MagiskHide Style Mount Namespace Isolation
 void isolate_denylist() {
     FILE *deny_file = fopen(DENYLIST_PATH, "r");
     if (!deny_file) return;
@@ -107,8 +150,6 @@ void isolate_denylist() {
             
             for (int i = 0; i < deny_count; i++) {
                 if (strcmp(uid_str, deny_uids[i]) == 0) {
-                    // Found a denylisted app! Isolate its mount namespace.
-                    // We use nsenter to enter its mount namespace and lazy-unmount NexusSU files.
                     char cmd[512];
                     snprintf(cmd, sizeof(cmd), "nsenter -t %d -m -- sh -c 'cat /proc/%d/mounts | grep nexussu | cut -d \\  -f 2 | xargs -r umount -l 2>/dev/null' >/dev/null 2>&1 &", pid, pid);
                     system(cmd);
@@ -121,13 +162,20 @@ void isolate_denylist() {
 }
 
 int main() {
+    // Register as manager and escalate to get MAC bypass
+    prctl(NEXUSSU_PRCTL_MAGIC, CMD_REGISTER_MANAGER, 0, 0, 0);
+    prctl(NEXUSSU_PRCTL_MAGIC, CMD_ESCALATE_SELF, 0, 0, 0);
+
     // 1. Re-apply saved root grants to the kernel
     apply_saved_root_grants();
     
     // 2. Execute all active module service.sh scripts
     execute_module_scripts();
     
-    // 3. Background loop to isolate denylisted apps (MagiskHide)
+    // 3. NEW: Apply all active module system.prop files
+    apply_module_props();
+    
+    // 4. Background loop to isolate denylisted apps (MagiskHide)
     while(1) {
         isolate_denylist();
         sleep(2); // Poll every 2 seconds
