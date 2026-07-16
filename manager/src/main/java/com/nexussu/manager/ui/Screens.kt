@@ -540,12 +540,20 @@ fun SettingsScreen(
     var systemlessHosts by remember { mutableStateOf(false) }
     var safeMode by remember { mutableStateOf(RootShell.execute("[ -f /data/adb/nexussu/safemode ] && echo 1 || echo 0").trim() == "1") }
     var adbRoot by remember { mutableStateOf(NexusEngine.isAdbRootEnabled()) }
-    
-    // NEW: Temporary Root State
     var tempRoot by remember { mutableStateOf(RootShell.execute("mount | grep '/system/bin/su'").isBlank()) }
     
     var isCheckingUpdates by remember { mutableStateOf(false) }
     var updateUrl by remember { mutableStateOf<String?>(null) }
+
+    // NEW: Get real app version
+    val currentVersion = remember {
+        try {
+            val pkgInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            "v${pkgInfo.versionName}"
+        } catch (e: Exception) {
+            "v1.0.0"
+        }
+    }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -578,7 +586,6 @@ fun SettingsScreen(
         SectionLabel("Root Behavior")
         GlassCard {
             Column {
-                // NEW: Temporary Root Toggle
                 BehaviorToggle("Disable Root", "Temporarily unmount su and busybox", checked = tempRoot) { isChecked ->
                     scope.launch(Dispatchers.IO) {
                         val success = if (isChecked) NexusEngine.disableRoot() else NexusEngine.enableRoot()
@@ -617,7 +624,8 @@ fun SettingsScreen(
                     if (!isCheckingUpdates) {
                         isCheckingUpdates = true
                         scope.launch(Dispatchers.IO) {
-                            val url = UpdateChecker.checkForUpdates(context)
+                            // NEW: Pass the real current version
+                            val url = UpdateChecker.checkForUpdates(context, currentVersion)
                             isCheckingUpdates = false
                             updateUrl = url
                             if (url == null) {
@@ -631,7 +639,7 @@ fun SettingsScreen(
 
         if (updateUrl != null) {
             GlassCard {
-                SettingsRow("Update Available!", "Tap here to download v1.0.1") {
+                SettingsRow("Update Available!", "Tap here to download the latest version") {
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(updateUrl))
                     context.startActivity(intent)
                 }
@@ -673,7 +681,8 @@ fun SettingsScreen(
         SectionLabel("About")
         GlassCard {
             Column {
-                KeyValueRow("Manager Version", "1.0.0")
+                // NEW: Display real app version
+                KeyValueRow("Manager Version", currentVersion.removePrefix("v"))
                 Divider(color = p.glassEdge, thickness = 0.5.dp)
                 KeyValueRow("Engine Version", if (engineVersion == 100) "v100 (Active)" else "Not Found")
                 Divider(color = p.glassEdge, thickness = 0.5.dp)
@@ -706,7 +715,7 @@ fun SettingsRow(title: String, subtitle: String, onClick: () -> Unit) {
         }
         Box(Modifier.rotate(180f)) { BackIcon(tint = p.dim) }
     }
-}
+}                    
 
 // ---------- Root Lens ----------
 @Composable
