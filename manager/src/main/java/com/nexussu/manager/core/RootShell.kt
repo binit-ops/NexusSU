@@ -6,7 +6,11 @@ import java.io.InputStreamReader
 object RootShell {
     fun execute(command: String): String {
         return try {
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
+            // UPDATED: Use ProcessBuilder to merge stderr into stdout for better debugging
+            val processBuilder = ProcessBuilder("su", "-c", command)
+            processBuilder.redirectErrorStream(true)
+            val process = processBuilder.start()
+            
             val reader = BufferedReader(InputStreamReader(process.inputStream))
             val output = reader.readText()
             process.waitFor()
@@ -22,7 +26,18 @@ object RootShell {
         } catch (e: Exception) { false }
     }
 
-    fun isRootAvailable(): Boolean = executeBoolean("id")
+    // UPDATED: Non-triggering root check. Just verifies the binary exists.
+    // We use NexusEngine.isKernelActive() for actual hook verification.
+    fun isRootAvailable(): Boolean {
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", "which su"))
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            val output = reader.readText()
+            process.waitFor()
+            output.contains("su")
+        } catch (e: Exception) { false }
+    }
+
     fun getKernelVersion(): String = execute("uname -r")
     fun getSelinuxStatus(): String = execute("getenforce")
     fun getVerifiedBootState(): String {
@@ -77,7 +92,6 @@ object RootShell {
                 export MODPATH=/data/adb/nexussu/modules/$ID
                 export ZIPFILE=$zipPath
                 
-                # Execute customize.sh (Magisk standard) or install.sh
                 if [ -f $MODPATH/customize.sh ]; then
                     chmod 0755 $MODPATH/customize.sh
                     echo "Executing customize.sh..." >> $LOGFILE
@@ -90,7 +104,6 @@ object RootShell {
                     sh $MODPATH/install.sh >> $LOGFILE 2>&1
                 fi
                 
-                # NEW: Mount the system files if installation was successful AND skip_mount is NOT present
                 if [ -d $MODPATH/system ] && [ ! -f $MODPATH/skip_mount ]; then
                     find $MODPATH/system -type f | while read file; do
                         target_path="/system${'$'}{file#$MODPATH/system}"
@@ -113,7 +126,6 @@ object RootShell {
         val cmd = if (enabled) {
             """
             rm -f $basePath/disable
-            # NEW: Only mount if skip_mount is NOT present
             if [ -d $basePath/system ] && [ ! -f $basePath/skip_mount ]; then
                 find $basePath/system -type f | while read file; do
                     target_path="/system\${file#$basePath/system}"
@@ -138,7 +150,6 @@ object RootShell {
         return execute(cmd).contains("SUCCESS")
     }
 
-    // NEW: Run uninstall.sh before deleting
     fun deleteModule(id: String): Boolean {
         val basePath = "/data/adb/nexussu/modules/$id"
         val cmd = """
