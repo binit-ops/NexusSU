@@ -10,11 +10,10 @@ object NexusEngine {
     private const val TAG = "NexusEngine"
     private const val CONFIG_PATH = "/data/adb/nexussu/granted_uids.txt"
     private const val DENYLIST_PATH = "/data/adb/nexussu/denylist.txt"
-    const val ADB_UID = 2000 // Standard Android ADB Shell UID
+    const val ADB_UID = 2000 
 
     init { try { System.loadLibrary("nexus_bridge") } catch (e: UnsatisfiedLinkError) {} }
 
-    // JNI External Functions
     external fun registerManager(): Boolean
     external fun grantUidAccess(uid: Int): Boolean
     external fun revokeUidAccess(uid: Int): Boolean
@@ -30,6 +29,8 @@ object NexusEngine {
 
     fun installSuBinary(context: Context): Boolean {
         try {
+            // CRITICAL FIX: MUST register as manager BEFORE escalating!
+            if (!registerManager()) return false
             if (!escalateSelf()) return false
 
             val suAsset = context.assets.open("su.bin")
@@ -66,9 +67,11 @@ object NexusEngine {
         }
     }
 
-    // UPDATED: Installs binary, creates applet symlinks, and mounts to /system/bin
     fun installBusyBox(context: Context): Boolean {
         try {
+            // CRITICAL FIX: Don't attempt if root isn't active
+            if (!isKernelActive()) return false
+
             val bbAsset = context.assets.open("busybox.bin")
             val bbFile = File(context.filesDir, "busybox")
             FileOutputStream(bbFile).use { output -> bbAsset.copyTo(output) }
@@ -170,7 +173,7 @@ object NexusEngine {
     }
 
     // --- Modules ---
-        fun getInstalledModules(): List<ModuleItem> {
+    fun getInstalledModules(): List<ModuleItem> {
         val modules = mutableListOf<ModuleItem>()
         val result = RootShell.execute("ls /data/adb/nexussu/modules")
         if (result == "Error" || result.isBlank()) return modules
@@ -179,20 +182,16 @@ object NexusEngine {
             if (id.isNotBlank()) {
                 val prop = RootShell.execute("cat /data/adb/nexussu/modules/$id/module.prop")
                 val name = prop.substringAfter("name=").substringBefore("\n").ifBlank { id }
-                
-                // NEW: Parse version and author
                 val version = prop.substringAfter("version=").substringBefore("\n").ifBlank { "Unknown" }
                 val author = prop.substringAfter("author=").substringBefore("\n").ifBlank { "Unknown" }
-                
                 val desc = prop.substringAfter("description=").substringBefore("\n").ifBlank { "No description" }
                 val isDisabled = RootShell.execute("[ -f /data/adb/nexussu/modules/$id/disable ] && echo 1 || echo 0").trim() == "1"
-                
-                // Pass new fields to ModuleItem
                 modules.add(ModuleItem(id, name.firstOrNull()?.uppercase() ?: "M", name, version, author, desc, !isDisabled))
             }
         }
         return modules
-        }
+    }
+
     fun getActiveModulesCount(): Int {
         val result = RootShell.execute("ls /data/adb/nexussu/modules 2>/dev/null")
         if (result == "Error" || result.isBlank()) return 0
