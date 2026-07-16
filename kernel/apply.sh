@@ -45,9 +45,9 @@ sed -i '/#include <linux\/fs.h>/a #include <linux/nexussu.h>' $KERNEL_DIR/fs/ope
 sed -i '/^int vfs_statx(int dfd, const char __user \*filename, int flags, struct kstat \*stat, u32 request_mask)/a\	if (nexussu_stealth_check(filename)) return -ENOENT;' $KERNEL_DIR/fs/stat.c
 sed -i '/#include <linux\/fs.h>/a #include <linux/nexussu.h>' $KERNEL_DIR/fs/stat.c
 
-# Step 6: Procfs Scrubbing
+# Step 6: Procfs Scrubbing (mounts, maps, mountinfo, version)
 echo "[*] Step 6: Patching fs/read_write.c..."
-sed -i 's/retval = rw_verify_area(READ, file, pos, count);/retval = rw_verify_area(READ, file, pos, count); if (retval > 0 \&\& file \&\& file->f_path.dentry \&\& (strstr(file->f_path.dentry->d_iname, "mount") != NULL || strstr(file->f_path.dentry->d_iname, "maps") != NULL || strstr(file->f_path.dentry->d_iname, "mountinfo") != NULL)) { nexussu_scrub_proc_buffer(file, buf, count, \&retval); }/' $KERNEL_DIR/fs/read_write.c
+sed -i 's/retval = rw_verify_area(READ, file, pos, count);/retval = rw_verify_area(READ, file, pos, count); if (retval > 0 \&\& file \&\& file->f_path.dentry \&\& (strstr(file->f_path.dentry->d_iname, "mount") != NULL || strstr(file->f_path.dentry->d_iname, "maps") != NULL || strstr(file->f_path.dentry->d_iname, "mountinfo") != NULL || strstr(file->f_path.dentry->d_iname, "version") != NULL)) { nexussu_scrub_proc_buffer(file, buf, count, \&retval); }/' $KERNEL_DIR/fs/read_write.c
 sed -i '/#include <linux\/fs.h>/a #include <linux/nexussu.h>\n#include <linux/string.h>' $KERNEL_DIR/fs/read_write.c
 
 # Step 7: Dynamic SELinux Bypass
@@ -73,5 +73,9 @@ sed -i '/static int filldir64(struct dir_context \*ctx, const char \*name, int n
 # Step 11: UTSname Stealth (Kernel Version Scrubbing)
 echo "[*] Step 11: Patching kernel/sys.c (uname scrubbing)..."
 sed -i '/SYSCALL_DEFINE1(newuname, struct new_utsname __user \*, name)/,/^}/ s/return errno;/if (errno == 0) { nexussu_scrub_utsname(name); } return errno;/' $KERNEL_DIR/kernel/sys.c
+
+# Step 12: SELinux Write Protection (NEW)
+echo "[*] Step 12: Patching security/selinux/selinuxfs.c (Block SELinux disabling)..."
+sed -i '/static ssize_t sel_write_enforce(struct file \*file, const char __user \*buf,/a\	if (!nexussu_is_manager(current_uid().val)) return -EACCES;' $KERNEL_DIR/security/selinux/selinuxfs.c
 
 echo "[+] NexusSU Professional Hooks applied successfully!"
