@@ -13,7 +13,8 @@ object UpdateChecker {
     // Replace with your actual GitHub username and repo name
     private const val GITHUB_API = "https://api.github.com/repos/binit-ops/NexusSU/releases/latest"
 
-    suspend fun checkForUpdates(context: Context): String? {
+    // NEW: Accepts the current installed version to compare against
+    suspend fun checkForUpdates(context: Context, currentVersion: String): String? {
         return withContext(Dispatchers.IO) {
             try {
                 val url = URL(GITHUB_API)
@@ -26,11 +27,11 @@ object UpdateChecker {
                 if (connection.responseCode == 200) {
                     val response = connection.inputStream.bufferedReader().use { it.readText() }
                     val json = JSONObject(response)
-                    val latestVersion = json.optString("tag_name", "v1.0.0")
+                    val latestVersion = json.optString("tag_name", "v0.0.0")
                     val htmlUrl = json.optString("html_url", "")
                     
-                    // Compare versions (e.g., v1.0.0 vs v1.0.1)
-                    if (latestVersion != "v1.0.0") {
+                    // Compare the real versions
+                    if (latestVersion != currentVersion) {
                         return@withContext htmlUrl
                     }
                 }
