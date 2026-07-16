@@ -59,6 +59,8 @@
 + extern void nexussu_remove_deny_uid(uid_t uid);
 + extern bool nexussu_hide_dir_check(const char *name, int namlen);
 + extern void nexussu_scrub_utsname(struct new_utsname __user *name);
++ extern void nexussu_report_deny_exec(pid_t pid);
++ extern int nexussu_wait_for_deny_pid(void);
 + 
 + static inline void nexussu_escalate(void) {
 +     struct cred *new_creds = prepare_creds();
@@ -88,7 +90,6 @@
             <div class="code-toolbar"><div class="code-info"><span class="file-badge">include/linux/sched.h</span><span class="search-badge">🔍 Search: struct task_struct {</span></div></div>
             <pre><code class="language-c">
   /* Locate struct task_struct { ... } */
-  /* Add this near the end of the struct, before the closing brace }; */
 <code class="diff-add">
 + bool nexussu_granted;
 </code>
@@ -117,6 +118,7 @@
 +         case 4: return 100;
 +         case 6: nexussu_add_deny_uid((uid_t)arg3); return 0;
 +         case 7: nexussu_remove_deny_uid((uid_t)arg3); return 0;
++         case 8: return nexussu_wait_for_deny_pid(); // NEW: Zero battery MagiskHide
 +         default: return -EINVAL;
 +     }
 + }
@@ -126,7 +128,7 @@
             </code></pre>
         </div>
 
-        <h3>Step 4: Execution Interception & Denylist</h3>
+        <h3>Step 4: Execution Interception & Denylist Reporting</h3>
         <div class="code-window">
             <div class="code-toolbar"><div class="code-info"><span class="file-badge">fs/exec.c</span><span class="search-badge">🔍 Search: prepare_bprm_creds</span></div></div>
             <pre><code class="language-c">
@@ -138,7 +140,10 @@
   /* Locate: retval = prepare_bprm_creds(bprm); */
   /* Add below it: */
 <code class="diff-add">
-+ if (nexussu_is_denied(current_uid())) return -EACCES;
++ if (nexussu_is_denied(current_uid())) { 
++     if (nexussu_stealth_check(bprm->filename)) return -EACCES; // Block su
++     nexussu_report_deny_exec(getpid()); // Report app launch to daemon
++ } 
 + if (nexussu_is_granted(current_uid())) {
 +     nexussu_escalate();
 +     bprm->secureexec = 1; 
@@ -281,7 +286,7 @@
             </code></pre>
         </div>
 
-        <h3>Step 12: SELinux Write Protection (NEW)</h3>
+        <h3>Step 12: SELinux Write Protection</h3>
         <div class="code-window">
             <div class="code-toolbar"><div class="code-info"><span class="file-badge">security/selinux/selinuxfs.c</span><span class="search-badge">🔍 Search: sel_write_enforce</span></div></div>
             <pre><code class="language-c">
@@ -295,4 +300,4 @@
 
     </div>
 </body>
-    </html>
+</html>
