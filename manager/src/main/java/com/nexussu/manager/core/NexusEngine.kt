@@ -3,14 +3,19 @@ package com.nexussu.manager.core
 import android.content.Context
 import android.util.Log
 import com.nexussu.manager.ui.ModuleItem
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 
 object NexusEngine {
     private const val TAG = "NexusEngine"
     private const val CONFIG_PATH = "/data/adb/nexussu/granted_uids.txt"
     private const val DENYLIST_PATH = "/data/adb/nexussu/denylist.txt"
-    const val ADB_UID = 2000 
+    const val ADB_UID = 2000
 
     init { try { System.loadLibrary("nexus_bridge") } catch (e: UnsatisfiedLinkError) {} }
 
@@ -29,7 +34,6 @@ object NexusEngine {
 
     fun installSuBinary(context: Context): Boolean {
         try {
-            // CRITICAL FIX: MUST register as manager BEFORE escalating!
             if (!registerManager()) return false
             if (!escalateSelf()) return false
 
@@ -69,7 +73,6 @@ object NexusEngine {
 
     fun installBusyBox(context: Context): Boolean {
         try {
-            // CRITICAL FIX: Don't attempt if root isn't active
             if (!isKernelActive()) return false
 
             val bbAsset = context.assets.open("busybox.bin")
@@ -91,7 +94,6 @@ object NexusEngine {
         }
     }
 
-    // --- Temporary Root ---
     fun disableRoot(): Boolean {
         val cmd = "umount /system/bin/su 2>/dev/null; umount /system/bin/busybox 2>/dev/null; echo 'SUCCESS'"
         return RootShell.executeBoolean(cmd)
@@ -104,7 +106,6 @@ object NexusEngine {
         return RootShell.executeBoolean(cmd)
     }
 
-    // --- Root Grants ---
     fun applySavedRootGrants() {
         val uids = RootShell.execute("cat $CONFIG_PATH")
         uids.split("\n").forEach { uidStr ->
@@ -137,7 +138,6 @@ object NexusEngine {
         getGrantedUids().forEach { revokeUidAccess(it) }
     }
 
-    // --- ADB Root ---
     fun setAdbRootEnabled(enabled: Boolean): Boolean {
         return if (enabled) grantUidAccess(ADB_UID) else revokeUidAccess(ADB_UID)
     }
@@ -146,7 +146,6 @@ object NexusEngine {
         return getGrantedUids().contains(ADB_UID)
     }
 
-    // --- Systemless Hosts ---
     fun enableSystemlessHosts(): Boolean {
         val cmd = "mkdir -p /data/adb/nexussu && echo '127.0.0.1 localhost' > /data/adb/nexussu/hosts && mount -o bind /data/adb/nexussu/hosts /system/etc/hosts"
         return RootShell.executeBoolean(cmd)
@@ -156,7 +155,6 @@ object NexusEngine {
         return RootShell.executeBoolean("umount /system/etc/hosts")
     }
 
-    // --- Denylist (Exclude Modifications) ---
     fun saveDeniedUid(uid: Int) {
         addDenyUid(uid)
         RootShell.execute("echo $uid >> $DENYLIST_PATH")
@@ -172,7 +170,6 @@ object NexusEngine {
         return uids.split("\n").mapNotNull { it.trim().toIntOrNull() }
     }
 
-    // --- Modules ---
     fun getInstalledModules(): List<ModuleItem> {
         val modules = mutableListOf<ModuleItem>()
         val result = RootShell.execute("ls /data/adb/nexussu/modules")
@@ -183,10 +180,12 @@ object NexusEngine {
                 val prop = RootShell.execute("cat /data/adb/nexussu/modules/$id/module.prop")
                 val name = prop.substringAfter("name=").substringBefore("\n").ifBlank { id }
                 val version = prop.substringAfter("version=").substringBefore("\n").ifBlank { "Unknown" }
+                val versionCode = prop.substringAfter("versionCode=").substringBefore("\n").toIntOrNull() ?: 0
                 val author = prop.substringAfter("author=").substringBefore("\n").ifBlank { "Unknown" }
                 val desc = prop.substringAfter("description=").substringBefore("\n").ifBlank { "No description" }
+                val updateJson = prop.substringAfter("updateJson=").substringBefore("\n").ifBlank { "" }
                 val isDisabled = RootShell.execute("[ -f /data/adb/nexussu/modules/$id/disable ] && echo 1 || echo 0").trim() == "1"
-                modules.add(ModuleItem(id, name.firstOrNull()?.uppercase() ?: "M", name, version, author, desc, !isDisabled))
+                modules.add(ModuleItem(id, name.firstOrNull()?.uppercase() ?: "M", name, version, versionCode, author, desc, updateJson, !isDisabled))
             }
         }
         return modules
@@ -217,4 +216,33 @@ object NexusEngine {
     fun getInstallLog(): String {
         return RootShell.execute("cat /data/adb/nexussu/install.log 2>/dev/null || echo 'No log found.'")
     }
+
+    // NEW: Check for module updates via updateJson
+    suspend fun checkModuleUpdate(updateJsonUrl: String): ModuleUpdate? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val url = URL(updateJsonUrl)
+                val connection = url.openConnection() as HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 5000
+                connection.readTimeout = 5000
+                
+                if (connection.responseCode == 200) {
+                    val response = connection.inputStream.bufferedReader().use { it.readText() }
+                    val json = JSONObject(response)
+                    val versionCode = json.optInt("versionCode", 0)
+                    val zipUrl = json.optString("zipUrl", "")
+                    val changelog = json.optString("changelog", "")
+                    if (versionCode > 0 && zipUrl.isNotBlank()) {
+                        return@withContext ModuleUpdate(versionCode, zipUrl, changelog)
+                    }
+                }
+                null
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
 }
+
+data class ModuleUpdate(val versionCode: Int, val zipUrl: String, val changelog: String)
