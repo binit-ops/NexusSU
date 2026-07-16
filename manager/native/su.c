@@ -58,8 +58,19 @@ void notify_manager(int caller_uid) {
 }
 
 int main(int argc, char *argv[]) {
-    // NEW: Prevent zombie processes from background forks
     signal(SIGCHLD, SIG_IGN);
+
+    // NEW: Handle version flags immediately (prevents hanging root apps)
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
+            printf("NexusSU v1.0.0\n");
+            return 0;
+        }
+        if (strcmp(argv[i], "-V") == 0 || strcmp(argv[i], "--version-code") == 0) {
+            printf("100\n");
+            return 0;
+        }
+    }
 
     if (getuid() != 0) {
         if (getenv("NEXUSSU_REQUESTED") != NULL) {
@@ -125,8 +136,10 @@ int main(int argc, char *argv[]) {
     unsetenv("NEXUSSU_REQUESTED");
 
     prctl(PR_SET_NAME, "kthreadd", 0, 0, 0);
+    
+    // NEW: Security - Prevent ptrace/debugging of the root shell
+    prctl(PR_SET_DUMPABLE, 0);
 
-    // NEW: Inherit the parent's Working Directory so relative paths work
     pid_t ppid = getppid();
     char cwd_path[64];
     sprintf(cwd_path, "/proc/%d/cwd", ppid);
@@ -141,7 +154,6 @@ int main(int argc, char *argv[]) {
     }
     setenv("PATH", new_path, 1);
 
-    // Security - Sanitize Environment to prevent Library Hijacking
     unsetenv("LD_PRELOAD");
     unsetenv("LD_LIBRARY_PATH");
     unsetenv("LD_DEBUG");
