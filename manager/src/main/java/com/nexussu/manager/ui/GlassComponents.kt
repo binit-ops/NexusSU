@@ -245,13 +245,17 @@ fun LiquidTabBar(selected: Tab, onSelect: (Tab) -> Unit, modifier: Modifier = Mo
 
 // ---------- Toggle & segmented control ----------
 @Composable
-fun GlassToggle(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+fun GlassToggle(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     val p = LocalNexusPalette.current
-    val track by animateColorAsState(if (checked) p.accent else p.dim.copy(alpha = 0.25f), label = "track")
+    // Grey out if disabled
+    val trackColor = if (!enabled) p.dim.copy(alpha = 0.1f) else if (checked) p.accent else p.dim.copy(alpha = 0.25f)
+    val knobColor = if (!enabled) p.dim.copy(alpha = 0.3f) else Color.White
+    
+    val track by animateColorAsState(trackColor, label = "track")
     val knob by animateDpAsState(if (checked) 16.dp else 0.dp, spring(dampingRatio = 0.6f), label = "knob")
     Box(
         modifier.size(width = 38.dp, height = 22.dp).clip(RoundedCornerShape(50)).background(track)
-            .clickable(remember { MutableInteractionSource() }, indication = null) { onCheckedChange(!checked) }
+            .clickable(enabled = enabled, remember { MutableInteractionSource() }, indication = null) { onCheckedChange(!checked) }
             .padding(2.dp)
     ) {
         Box(
@@ -259,7 +263,7 @@ fun GlassToggle(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: 
                 .graphicsLayer { translationX = knob.toPx() }
                 .size(18.dp)
                 .clip(CircleShape)
-                .background(Color.White)
+                .background(knobColor)
         )
     }
 }
