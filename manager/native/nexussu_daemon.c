@@ -10,7 +10,7 @@
 #define CMD_REGISTER_MANAGER 5
 #define CMD_GRANT_UID 1
 #define CMD_ESCALATE_SELF 3
-#define CMD_WAIT_FOR_DENY_PID 8 // NEW
+#define CMD_WAIT_FOR_DENY_PID 8
 
 #define MODULES_DIR "/data/adb/nexussu/modules"
 
@@ -79,7 +79,50 @@ void apply_module_props() {
     closedir(dir);
 }
 
-// NEW: Isolate a specific PID instead of scanning all of /proc
+// NEW: Clean up modules pending removal (Deferred Uninstall)
+void cleanup_removed_modules() {
+    DIR *dir = opendir(MODULES_DIR);
+    if (!dir) return;
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] == '.') continue;
+
+        char module_path[512];
+        snprintf(module_path, sizeof(module_path), "%s/%s", MODULES_DIR, entry->d_name);
+
+        char remove_path[600];
+        snprintf(remove_path, sizeof(remove_path), "%s/remove", module_path);
+        
+        if (access(remove_path, F_OK) == 0) {
+            // Run uninstall.sh if it exists
+            char script_path[600];
+            snprintf(script_path, sizeof(script_path), "%s/uninstall.sh", module_path);
+            if (access(script_path, F_OK) == 0) {
+                chmod(script_path, 0755);
+                char cmd[700];
+                snprintf(cmd, sizeof(cmd), "sh %s >/dev/null 2>&1", script_path);
+                system(cmd);
+            }
+            
+            // Unmount system files
+            char system_path[600];
+            snprintf(system_path, sizeof(system_path), "%s/system", module_path);
+            if (access(system_path, F_OK) == 0) {
+                char cmd[700];
+                snprintf(cmd, sizeof(cmd), "find %s -type f | while read file; do target_path=$(echo $file | sed 's|%s|/system|'); umount $target_path 2>/dev/null; done", system_path, system_path);
+                system(cmd);
+            }
+            
+            // Delete the folder
+            char rm_cmd[700];
+            snprintf(rm_cmd, sizeof(rm_cmd), "rm -rf %s", module_path);
+            system(rm_cmd);
+        }
+    }
+    closedir(dir);
+}
+
 void isolate_pid(int pid) {
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "nsenter -t %d -m -- sh -c 'cat /proc/%d/mounts | grep nexussu | cut -d \\  -f 2 | xargs -r umount -l 2>/dev/null' >/dev/null 2>&1 &", pid, pid);
@@ -87,7 +130,7 @@ void isolate_pid(int pid) {
 }
 
 int main(int argc, char *argv[]) {
-    // NEW: Allow the daemon to be run as a one-off command to reset the manager UID
+    // Allow the daemon to be run as a one-off command to reset the manager UID
     if (argc > 1 && strcmp(argv[1], "--reset-manager") == 0) {
         prctl(NEXUSSU_PRCTL_MAGIC, CMD_REGISTER_MANAGER, 0, 0, 0); // Temp register as root
         prctl(NEXUSSU_PRCTL_MAGIC, CMD_RESET_MANAGER, 0, 0, 0);
@@ -100,14 +143,17 @@ int main(int argc, char *argv[]) {
     else snprintf(new_path, sizeof(new_path), "/data/adb/nexussu/bin:/system/bin:/system/xbin:/vendor/bin");
     setenv("PATH", new_path, 1);
 
-    // CRITICAL FIX: Daemon does NOT register as manager. It runs as UID 0, so kernel allows it.
+    // Daemon does NOT register as manager. It runs as UID 0, so kernel allows it.
     prctl(NEXUSSU_PRCTL_MAGIC, CMD_ESCALATE_SELF, 0, 0, 0);
 
+    cleanup_removed_modules(); // NEW: Delete modules pending removal
     apply_saved_root_grants();
     execute_module_scripts();
     apply_module_props();
     
+    // Zero Battery Drain MagiskHide Loop
     while(1) {
+        // This call blocks (sleeps) until the kernel wakes it up!
         int pid = prctl(NEXUSSU_PRCTL_MAGIC, CMD_WAIT_FOR_DENY_PID, 0, 0, 0);
         if (pid > 0) {
             isolate_pid(pid);
