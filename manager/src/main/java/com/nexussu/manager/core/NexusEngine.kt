@@ -124,6 +124,29 @@ object NexusEngine {
         }
     }
 
+        // NEW: Install resetprop
+    fun installResetProp(context: Context): Boolean {
+        try {
+            if (!isKernelActive()) return false
+
+            val rpAsset = context.assets.open("resetprop.bin")
+            val rpFile = File(context.filesDir, "resetprop")
+            FileOutputStream(rpFile).use { output -> rpAsset.copyTo(output) }
+            rpFile.setExecutable(true, false)
+
+            val cmd = "sh -c \"cp ${rpFile.absolutePath} /data/adb/nexussu/bin/resetprop && " +
+                      "chmod 0755 /data/adb/nexussu/bin/resetprop && " +
+                      "mount --bind /data/adb/nexussu/bin/resetprop /system/bin/resetprop\""
+            
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+            process.waitFor()
+            return process.exitValue() == 0
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to install resetprop: ${e.message}")
+            return false
+        }
+    }
+
     // --- Temporary Root ---
     fun disableRoot(): Boolean {
         val cmd = "umount /system/bin/su 2>/dev/null; umount /system/bin/busybox 2>/dev/null; echo 'SUCCESS'"
