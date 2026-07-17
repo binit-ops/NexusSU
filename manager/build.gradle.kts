@@ -157,6 +157,7 @@ tasks.named("preBuild").configure {
     dependsOn("compileSuBinary")
     dependsOn("compileNexusDaemon")
     dependsOn("downloadBusyBox")
+    dependsOn("downloadResetProp") // NEW
 }
 
 // --- DOWNLOAD REAL PREBUILT RESETPROP ---
