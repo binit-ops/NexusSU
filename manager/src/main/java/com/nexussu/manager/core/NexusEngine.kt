@@ -3,8 +3,7 @@ package com.nexussu.manager.core
 import android.content.Context
 import android.util.Log
 import com.nexussu.manager.ui.ModuleItem
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -17,8 +16,12 @@ object NexusEngine {
     private const val DENYLIST_PATH = "/data/adb/nexussu/denylist.txt"
     const val ADB_UID = 2000
 
-        init { try { System.loadLibrary("nexus_bridge") } catch (e: UnsatisfiedLinkError) {} }
+    init { try { System.loadLibrary("nexus_bridge") } catch (e: UnsatisfiedLinkError) {} }
 
+    // Coroutine scope for background tasks like scheduled revokes
+    private val engineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // JNI External Functions
     external fun registerManager(): Boolean
     external fun grantUidAccess(uid: Int): Boolean
     external fun revokeUidAccess(uid: Int): Boolean
@@ -26,8 +29,8 @@ object NexusEngine {
     external fun escalateSelf(): Boolean
     external fun addDenyUid(uid: Int): Boolean
     external fun removeDenyUid(uid: Int): Boolean
-    external fun checkManager(): Boolean // NEW
-    external fun resetManager() // NEW
+    external fun checkManager(): Boolean
+    external fun resetManager()
 
     fun isKernelActive(): Boolean {
         if (getEngineVersion() != 100) return false
@@ -49,8 +52,18 @@ object NexusEngine {
         return false
     }
 
+    // NEW: Schedule a temporary grant to be revoked after a delay (default 10 mins)
+    fun scheduleRevoke(uid: Int, delayMillis: Long = 600000L) {
+        engineScope.launch {
+            delay(delayMillis)
+            revokeUidAccess(uid)
+            Log.d(TAG, "Temporary root for UID $uid revoked after timeout.")
+        }
+    }
+
     fun installSuBinary(context: Context): Boolean {
         try {
+            // CRITICAL FIX: MUST register as manager BEFORE escalating!
             if (!registerManager()) return false
             if (!escalateSelf()) return false
 
@@ -111,6 +124,7 @@ object NexusEngine {
         }
     }
 
+    // --- Temporary Root ---
     fun disableRoot(): Boolean {
         val cmd = "umount /system/bin/su 2>/dev/null; umount /system/bin/busybox 2>/dev/null; echo 'SUCCESS'"
         return RootShell.executeBoolean(cmd)
@@ -123,6 +137,7 @@ object NexusEngine {
         return RootShell.executeBoolean(cmd)
     }
 
+    // --- Root Grants ---
     fun applySavedRootGrants() {
         val uids = RootShell.execute("cat $CONFIG_PATH")
         uids.split("\n").forEach { uidStr ->
@@ -155,6 +170,7 @@ object NexusEngine {
         getGrantedUids().forEach { revokeUidAccess(it) }
     }
 
+    // --- ADB Root ---
     fun setAdbRootEnabled(enabled: Boolean): Boolean {
         return if (enabled) grantUidAccess(ADB_UID) else revokeUidAccess(ADB_UID)
     }
@@ -163,6 +179,7 @@ object NexusEngine {
         return getGrantedUids().contains(ADB_UID)
     }
 
+    // --- Systemless Hosts ---
     fun enableSystemlessHosts(): Boolean {
         val cmd = "mkdir -p /data/adb/nexussu && echo '127.0.0.1 localhost' > /data/adb/nexussu/hosts && mount -o bind /data/adb/nexussu/hosts /system/etc/hosts"
         return RootShell.executeBoolean(cmd)
@@ -172,6 +189,7 @@ object NexusEngine {
         return RootShell.executeBoolean("umount /system/etc/hosts")
     }
 
+    // --- Denylist (Exclude Modifications) ---
     fun saveDeniedUid(uid: Int) {
         addDenyUid(uid)
         RootShell.execute("echo $uid >> $DENYLIST_PATH")
@@ -187,7 +205,8 @@ object NexusEngine {
         return uids.split("\n").mapNotNull { it.trim().toIntOrNull() }
     }
 
-        fun getInstalledModules(): List<ModuleItem> {
+    // --- Modules ---
+    fun getInstalledModules(): List<ModuleItem> {
         val modules = mutableListOf<ModuleItem>()
         val result = RootShell.execute("ls /data/adb/nexussu/modules")
         if (result == "Error" || result.isBlank()) return modules
@@ -202,16 +221,13 @@ object NexusEngine {
                 val desc = prop.substringAfter("description=").substringBefore("\n").ifBlank { "No description" }
                 val updateJson = prop.substringAfter("updateJson=").substringBefore("\n").ifBlank { "" }
                 val isDisabled = RootShell.execute("[ -f /data/adb/nexussu/modules/$id/disable ] && echo 1 || echo 0").trim() == "1"
-                
-                // NEW: Check if pending removal
                 val isPendingRemoval = RootShell.execute("[ -f /data/adb/nexussu/modules/$id/remove ] && echo 1 || echo 0").trim() == "1"
-                
                 modules.add(ModuleItem(id, name.firstOrNull()?.uppercase() ?: "M", name, version, versionCode, author, desc, updateJson, !isDisabled, isPendingRemoval))
             }
         }
         return modules
     }
-    
+
     fun getActiveModulesCount(): Int {
         val result = RootShell.execute("ls /data/adb/nexussu/modules 2>/dev/null")
         if (result == "Error" || result.isBlank()) return 0
@@ -234,7 +250,6 @@ object NexusEngine {
         return RootShell.deleteModule(id)
     }
 
-    // NEW: Wrapper for restoring a module
     fun restoreModule(id: String): Boolean {
         return RootShell.restoreModule(id)
     }
@@ -243,7 +258,7 @@ object NexusEngine {
         return RootShell.execute("cat /data/adb/nexussu/install.log 2>/dev/null || echo 'No log found.'")
     }
 
-    // NEW: Check for module updates via updateJson
+    // --- Module Updates ---
     suspend fun checkModuleUpdate(updateJsonUrl: String): ModuleUpdate? {
         return withContext(Dispatchers.IO) {
             try {
