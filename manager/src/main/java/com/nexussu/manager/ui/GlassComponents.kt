@@ -247,7 +247,6 @@ fun LiquidTabBar(selected: Tab, onSelect: (Tab) -> Unit, modifier: Modifier = Mo
 @Composable
 fun GlassToggle(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     val p = LocalNexusPalette.current
-    // Grey out if disabled
     val trackColor = if (!enabled) p.dim.copy(alpha = 0.1f) else if (checked) p.accent else p.dim.copy(alpha = 0.25f)
     val knobColor = if (!enabled) p.dim.copy(alpha = 0.3f) else Color.White
     
@@ -255,7 +254,11 @@ fun GlassToggle(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: 
     val knob by animateDpAsState(if (checked) 16.dp else 0.dp, spring(dampingRatio = 0.6f), label = "knob")
     Box(
         modifier.size(width = 38.dp, height = 22.dp).clip(RoundedCornerShape(50)).background(track)
-            .clickable(enabled = enabled, remember { MutableInteractionSource() }, indication = null) { onCheckedChange(!checked) }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                enabled = enabled
+            ) { onCheckedChange(!checked) }
             .padding(2.dp)
     ) {
         Box(
