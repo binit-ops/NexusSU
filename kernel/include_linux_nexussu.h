@@ -15,6 +15,8 @@ extern void nexussu_scrub_proc_buffer(struct file *file, char __user *buf, size_
 
 extern void nexussu_set_manager_uid(uid_t uid);
 extern bool nexussu_is_manager(uid_t uid);
+extern bool nexussu_check_manager(void); // NEW
+extern void nexussu_reset_manager(void); // NEW
 
 extern bool nexussu_is_denied(kuid_t kuid);
 extern void nexussu_add_deny_uid(uid_t uid);
@@ -23,7 +25,6 @@ extern void nexussu_remove_deny_uid(uid_t uid);
 extern bool nexussu_hide_dir_check(const char *name, int namlen);
 extern void nexussu_scrub_utsname(struct new_utsname __user *name);
 
-/* NEW: Wait Queue Prototypes */
 extern void nexussu_report_deny_exec(pid_t pid);
 extern int nexussu_wait_for_deny_pid(void);
 
