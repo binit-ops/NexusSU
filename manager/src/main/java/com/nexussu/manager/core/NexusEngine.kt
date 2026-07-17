@@ -187,7 +187,7 @@ object NexusEngine {
         return uids.split("\n").mapNotNull { it.trim().toIntOrNull() }
     }
 
-    fun getInstalledModules(): List<ModuleItem> {
+        fun getInstalledModules(): List<ModuleItem> {
         val modules = mutableListOf<ModuleItem>()
         val result = RootShell.execute("ls /data/adb/nexussu/modules")
         if (result == "Error" || result.isBlank()) return modules
@@ -202,12 +202,16 @@ object NexusEngine {
                 val desc = prop.substringAfter("description=").substringBefore("\n").ifBlank { "No description" }
                 val updateJson = prop.substringAfter("updateJson=").substringBefore("\n").ifBlank { "" }
                 val isDisabled = RootShell.execute("[ -f /data/adb/nexussu/modules/$id/disable ] && echo 1 || echo 0").trim() == "1"
-                modules.add(ModuleItem(id, name.firstOrNull()?.uppercase() ?: "M", name, version, versionCode, author, desc, updateJson, !isDisabled))
+                
+                // NEW: Check if pending removal
+                val isPendingRemoval = RootShell.execute("[ -f /data/adb/nexussu/modules/$id/remove ] && echo 1 || echo 0").trim() == "1"
+                
+                modules.add(ModuleItem(id, name.firstOrNull()?.uppercase() ?: "M", name, version, versionCode, author, desc, updateJson, !isDisabled, isPendingRemoval))
             }
         }
         return modules
     }
-
+    
     fun getActiveModulesCount(): Int {
         val result = RootShell.execute("ls /data/adb/nexussu/modules 2>/dev/null")
         if (result == "Error" || result.isBlank()) return 0
