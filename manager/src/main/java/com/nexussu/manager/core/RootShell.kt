@@ -150,22 +150,16 @@ object RootShell {
         return execute(cmd).contains("SUCCESS")
     }
 
+        // UPDATED: Deferred uninstall (Magisk standard)
     fun deleteModule(id: String): Boolean {
         val basePath = "/data/adb/nexussu/modules/$id"
-        val cmd = """
-            if [ -f $basePath/uninstall.sh ]; then
-                chmod 0755 $basePath/uninstall.sh
-                sh $basePath/uninstall.sh
-            fi
-            if [ -d $basePath/system ]; then
-                find $basePath/system -type f | while read file; do
-                    target_path="/system\${file#$basePath/system}"
-                    umount \$target_path 2>/dev/null
-                done
-            fi
-            rm -rf $basePath
-            echo "SUCCESS"
-        """.trimIndent()
+        val cmd = "touch $basePath/remove && echo 'SUCCESS'"
         return execute(cmd).contains("SUCCESS")
     }
-}
+
+    // NEW: Undo deferred uninstall
+    fun restoreModule(id: String): Boolean {
+        val basePath = "/data/adb/nexussu/modules/$id"
+        val cmd = "rm -f $basePath/remove && echo 'SUCCESS'"
+        return execute(cmd).contains("SUCCESS")
+    }
