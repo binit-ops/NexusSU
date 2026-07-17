@@ -69,8 +69,7 @@ dependencies {
     implementation("androidx.room:room-runtime:$room_version")
     implementation("androidx.room:room-ktx:$room_version")
     ksp("androidx.room:room-compiler:$room_version")
-    
-    // ADDED: JSON parsing for Update Checker
+
     implementation("org.json:json:20240303")
 }
 
@@ -118,36 +117,44 @@ tasks.register<Exec>("compileNexusDaemon") {
     commandLine(clang, sourceFile.absolutePath, "-o", outputFile.absolutePath, "-static")
 }
 
-tasks.named("preBuild").configure {
-    dependsOn("compileSuBinary")
-    dependsOn("compileNexusDaemon")
-}
-
-// --- AUTO-COMPILE BUSYBOX ---
-tasks.register<Exec>("compileBusyBox") {
-    val ndkDir = android.ndkDirectory.absolutePath
-    val osName = System.getProperty("os.name").lowercase()
-    val hostTag = when {
-        osName.contains("windows") -> "windows-x86_64"
-        osName.contains("mac") -> "darwin-x86_64"
-        else -> "linux-x86_64"
-    }
-    val clang = file("$ndkDir/toolchains/llvm/prebuilt/$hostTag/bin/aarch64-linux-android24-clang").absolutePath
-    val sourceFile = file("native/busybox.c")
+// --- DOWNLOAD REAL PREBUILT BUSYBOX ---
+tasks.register("downloadBusyBox") {
     val outputDir = file("src/main/assets")
     val outputFile = file("$outputDir/busybox.bin")
+
     outputs.file(outputFile)
-    inputs.file(sourceFile)
+
     doFirst {
         outputDir.mkdirs()
-        if (!sourceFile.exists()) { throw GradleException("Missing native/busybox.c file!") }
+        
+        // Use pure Kotlin networking to download the binary (Cross-platform, no curl needed)
+        try {
+            val url = java.net.URL("https://github.com/Magisk-Modules-Repo/busybox-ndk/raw/master/busybox-arm64")
+            val connection = url.openConnection() as java.net.HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 15000
+            connection.readTimeout = 15000
+            connection.setRequestProperty("User-Agent", "NexusSU-Gradle-Build")
+            
+            if (connection.responseCode == 200) {
+                connection.inputStream.use { input ->
+                    outputFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                println("[NexusSU] Successfully downloaded real BusyBox binary.")
+            } else {
+                throw GradleException("Failed to download BusyBox: HTTP ${connection.responseCode}")
+            }
+            connection.disconnect()
+        } catch (e: Exception) {
+            throw GradleException("Failed to download BusyBox binary: ${e.message}")
+        }
     }
-    commandLine(clang, sourceFile.absolutePath, "-o", outputFile.absolutePath, "-static")
 }
 
-// Update preBuild to include BusyBox
 tasks.named("preBuild").configure {
     dependsOn("compileSuBinary")
     dependsOn("compileNexusDaemon")
-    dependsOn("compileBusyBox") // NEW
+    dependsOn("downloadBusyBox")
 }
