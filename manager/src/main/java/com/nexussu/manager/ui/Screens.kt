@@ -73,20 +73,16 @@ fun Drawable.toImageBitmap(): androidx.compose.ui.graphics.ImageBitmap {
 
 // ---------- Home ----------
 @Composable
-fun HomeScreen(onOpenAdvanced: () -> Unit) {
+fun HomeScreen(isRootActive: Boolean, onOpenAdvanced: () -> Unit) {
     val p = LocalNexusPalette.current
     val scope = rememberCoroutineScope()
     
     var grantedCount by remember { mutableStateOf(0) }
     var moduleCount by remember { mutableStateOf(0) }
-    var isRootActive by remember { mutableStateOf(true) } // Default to true to avoid flicker, check in background
-    var isKernelPatched by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        scope.launch(Dispatchers.IO) {
-            isKernelPatched = NexusEngine.isKernelActive()
-            isRootActive = RootShell.isRootAvailable()
-            if (isKernelPatched && isRootActive) {
+        if (isRootActive) {
+            scope.launch(Dispatchers.IO) {
                 grantedCount = NexusEngine.getGrantedUids().size
                 moduleCount = NexusEngine.getActiveModulesCount()
             }
@@ -94,8 +90,8 @@ fun HomeScreen(onOpenAdvanced: () -> Unit) {
     }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        // NEW: Kernel Warning Banner
-        if (!isKernelPatched) {
+        // Kernel Warning Banner
+        if (!isRootActive) {
             GlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp)
@@ -120,16 +116,16 @@ fun HomeScreen(onOpenAdvanced: () -> Unit) {
         }
 
         Column(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            RootLens(isActive = isRootActive && isKernelPatched)
+            RootLens(isActive = isRootActive)
             Spacer(Modifier.height(12.dp))
             Text("$grantedCount apps granted · $moduleCount modules active", color = p.dim, fontSize = 11.sp, fontFamily = MonoFont)
         }
-        DeviceCard(onOpenAdvanced = onOpenAdvanced)
+        DeviceCard(isRootActive, onOpenAdvanced)
     }
 }
 
 @Composable
-fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
+fun DeviceCard(isRootActive: Boolean, modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
     val p = LocalNexusPalette.current
     var expanded by remember { mutableStateOf(false) }
 
@@ -142,12 +138,9 @@ fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
     var selinuxStatus by remember { mutableStateOf("Loading...") }
     var verifiedBootState by remember { mutableStateOf("Loading...") }
     var busyboxStatus by remember { mutableStateOf("Loading...") }
-    var isRootAvailable by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        // FIX: Use isKernelActive to prevent UI freeze/dialog popups
-        isRootAvailable = NexusEngine.isKernelActive()
-        if (isRootAvailable) {
+        if (isRootActive) {
             kernelVersion = RootShell.getKernelVersion()
             selinuxStatus = RootShell.getSelinuxStatus()
             verifiedBootState = RootShell.getVerifiedBootState()
@@ -174,7 +167,7 @@ fun DeviceCard(modifier: Modifier = Modifier, onOpenAdvanced: () -> Unit) {
                 Column(Modifier.padding(top = 12.dp)) {
                     KeyValueRow("Android", "${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
                     KeyValueRow("Kernel", kernelVersion)
-                    KeyValueRow("SUSFS", if (isRootAvailable) "Active" else "Unavailable")
+                    KeyValueRow("SUSFS", if (isRootActive) "Active" else "Unavailable")
                     KeyValueRow("SELinux", selinuxStatus)
                     KeyValueRow("Verified boot", verifiedBootState)
                     KeyValueRow("BusyBox", busyboxStatus)
@@ -209,7 +202,7 @@ data class GrantedApp(
 )
 
 @Composable
-fun SuperuserScreen() {
+fun SuperuserScreen(isRootActive: Boolean) {
     val p = LocalNexusPalette.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -221,6 +214,7 @@ fun SuperuserScreen() {
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
+            if (!isRootActive) { isLoading = false; return@withContext }
             val grantedUids = NexusEngine.getGrantedUids()
             val deniedUids = NexusEngine.getDeniedUids()
             val pm = context.packageManager
@@ -272,12 +266,14 @@ fun SuperuserScreen() {
         Spacer(Modifier.height(14.dp))
         
         GlassCard(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            if (isLoading) {
+            if (!isRootActive) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Root not available.", color = p.dim, fontSize = 13.sp, fontFamily = MonoFont) }
+            } else if (isLoading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Scanning installed apps...", color = p.dim, fontSize = 13.sp, fontFamily = MonoFont) }
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {
                     itemsIndexed(filteredApps, key = { _, app -> app.packageName }) { index, app ->
-                        AppRow(app = app, onToggleRoot = { checked -> 
+                        AppRow(app = app, isRootActive = isRootActive, onToggleRoot = { checked -> 
                             val idx = apps.indexOf(app)
                             if (idx >= 0) apps[idx] = app.copy(toggledOn = checked)
                             scope.launch(Dispatchers.IO) {
@@ -299,7 +295,7 @@ fun SuperuserScreen() {
 }
 
 @Composable
-fun AppRow(app: GrantedApp, onToggleRoot: (Boolean) -> Unit, onToggleExclude: (Boolean) -> Unit) {
+fun AppRow(app: GrantedApp, isRootActive: Boolean, onToggleRoot: (Boolean) -> Unit, onToggleExclude: (Boolean) -> Unit) {
     val p = LocalNexusPalette.current
     var expanded by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, indication = null) { expanded = !expanded }) {
@@ -312,7 +308,7 @@ fun AppRow(app: GrantedApp, onToggleRoot: (Boolean) -> Unit, onToggleExclude: (B
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("ROOT", color = if (app.toggledOn) p.accent else p.dim, fontSize = 9.sp, fontFamily = MonoFont, fontWeight = FontWeight.Bold)
-                GlassToggle(app.toggledOn, onCheckedChange = { onToggleRoot(it) })
+                GlassToggle(app.toggledOn, onCheckedChange = { onToggleRoot(it) }, enabled = isRootActive)
             }
         }
         AnimatedVisibility(expanded, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
@@ -321,7 +317,7 @@ fun AppRow(app: GrantedApp, onToggleRoot: (Boolean) -> Unit, onToggleExclude: (B
                     Text("Exclude Modifications", color = p.ink, fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
                     Text("Hide root and SUSFS from this app", color = p.dim, fontSize = 10.sp, fontFamily = MonoFont)
                 }
-                GlassToggle(app.excludeMod, onCheckedChange = { onToggleExclude(it) })
+                GlassToggle(app.excludeMod, onCheckedChange = { onToggleExclude(it) }, enabled = isRootActive)
             }
         }
     }
@@ -329,7 +325,7 @@ fun AppRow(app: GrantedApp, onToggleRoot: (Boolean) -> Unit, onToggleExclude: (B
 
 // ---------- Log ----------
 @Composable
-fun LogScreen() {
+fun LogScreen(isRootActive: Boolean) {
     val p = LocalNexusPalette.current
     val scope = rememberCoroutineScope()
     val logs = remember { mutableStateListOf<String>() }
@@ -339,26 +335,28 @@ fun LogScreen() {
         var process: Process? = null
         var reader: java.io.BufferedReader? = null
         
-        scope.launch(Dispatchers.IO) {
-            try {
-                val cmd = "touch /data/adb/nexussu/logs.txt && tail -n 20 -f /data/adb/nexussu/logs.txt"
-                process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
-                reader = java.io.BufferedReader(java.io.InputStreamReader(process!!.inputStream))
-                
-                var line: String?
-                while (reader!!.readLine().also { line = it } != null) {
-                    val currentLine = line
-                    if (currentLine != null) {
-                        withContext(Dispatchers.Main) {
-                            logs.add(currentLine)
-                            if (logs.size > 200) logs.removeAt(0)
-                            scope.launch { listState.animateScrollToItem(logs.size - 1) }
+        if (isRootActive) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val cmd = "touch /data/adb/nexussu/logs.txt && tail -n 20 -f /data/adb/nexussu/logs.txt"
+                    process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+                    reader = java.io.BufferedReader(java.io.InputStreamReader(process!!.inputStream))
+                    
+                    var line: String?
+                    while (reader!!.readLine().also { line = it } != null) {
+                        val currentLine = line
+                        if (currentLine != null) {
+                            withContext(Dispatchers.Main) {
+                                logs.add(currentLine)
+                                if (logs.size > 200) logs.removeAt(0)
+                                scope.launch { listState.animateScrollToItem(logs.size - 1) }
+                            }
                         }
                     }
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    logs.add("Error reading logs or root denied.")
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        logs.add("Error reading logs or root denied.")
+                    }
                 }
             }
         }
@@ -372,19 +370,21 @@ fun LogScreen() {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
             Text("Root Access Logs", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             Box(
-                Modifier.clip(CircleShape).background(p.glassFill).clickable(remember { MutableInteractionSource() }, indication = null) {
+                Modifier.clip(CircleShape).background(p.glassFill).clickable(enabled = isRootActive, remember { MutableInteractionSource() }, indication = null) {
                     scope.launch(Dispatchers.IO) {
                         RootShell.execute("rm -f /data/adb/nexussu/logs.txt")
                         withContext(Dispatchers.Main) { logs.clear() }
                     }
                 }.padding(8.dp)
             ) {
-                Text("Clear", color = p.accent, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                Text("Clear", color = if (isRootActive) p.accent else p.dim, fontSize = 12.sp, fontWeight = FontWeight.Medium)
             }
         }
         
         GlassCard(modifier = Modifier.fillMaxSize()) {
-            if (logs.isEmpty()) {
+            if (!isRootActive) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Root not available.", color = p.dim, fontSize = 13.sp, fontFamily = MonoFont) }
+            } else if (logs.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Waiting for root requests...", color = p.dim, fontSize = 13.sp, fontFamily = MonoFont) }
             } else {
                 LazyColumn(
@@ -401,37 +401,11 @@ fun LogScreen() {
     }
 }
 
-                            }
-                            
-                            Text(
-                                text = "Uninstall",
-                                color = p.dim,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.clickable(remember { MutableInteractionSource() }, indication = null) {
-                                    scope.launch(Dispatchers.IO) {
-                                        NexusEngine.deleteModule(m.id)
-                                        modules.clear(); modules.addAll(NexusEngine.getInstalledModules())
-                                    }
-                                }.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                            GlassToggle(m.enabled, onCheckedChange = { checked ->
-                                modules[i] = m.copy(enabled = checked)
-                                scope.launch(Dispatchers.IO) { NexusEngine.setModuleEnabled(m.id, checked) }
-                            })
-                        }
-                        if (i < modules.lastIndex) Divider(color = p.glassEdge, thickness = 0.5.dp)
-                    }
-                }
-            }
-        }
-        
- // ---------- Module ----------
-// UPDATED: Added 'isPendingRemoval' field
+// ---------- Module ----------
 data class ModuleItem(val id: String, val initial: String, val name: String, val version: String, val versionCode: Int, val author: String, val desc: String, val updateJson: String, val enabled: Boolean, val isPendingRemoval: Boolean = false)
 
 @Composable
-fun ModuleScreen() {
+fun ModuleScreen(isRootActive: Boolean) {
     val p = LocalNexusPalette.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -443,6 +417,7 @@ fun ModuleScreen() {
     val moduleUpdates = remember { mutableStateMapOf<String, String>() }
 
     LaunchedEffect(Unit) {
+        if (!isRootActive) return@LaunchedEffect
         withContext(Dispatchers.IO) {
             val installed = NexusEngine.getInstalledModules()
             withContext(Dispatchers.Main) {
@@ -486,7 +461,9 @@ fun ModuleScreen() {
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Modules", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-        if (isInstalling) {
+        if (!isRootActive) {
+            GlassCard { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { Text("Root not available.", color = p.dim, fontSize = 13.sp, fontFamily = MonoFont) } }
+        } else if (isInstalling) {
             GlassCard { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { Text("Installing module...", color = p.accent, fontSize = 13.sp, fontFamily = MonoFont) } }
         } else if (modules.isEmpty()) {
             GlassCard { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { Text("No modules installed", color = p.dim, fontSize = 13.sp, fontFamily = MonoFont) } }
@@ -502,15 +479,13 @@ fun ModuleScreen() {
                                 Text(m.name, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text("v${m.version} by ${m.author}", color = p.dim, fontSize = 9.sp, fontFamily = MonoFont, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 
-                                // NEW: Show pending removal warning
                                 if (m.isPendingRemoval) {
                                     Text("Pending removal on next reboot", color = Color(0xFFFF5252), fontSize = 10.sp, fontFamily = MonoFont, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 } else {
                                     Text(m.desc, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             }
-                            
-                            // NEW: Undo button if pending removal
+
                             if (m.isPendingRemoval) {
                                 Text(
                                     text = "Undo",
@@ -525,7 +500,6 @@ fun ModuleScreen() {
                                     }.padding(horizontal = 8.dp, vertical = 4.dp)
                                 )
                             } else {
-                                // Update button if update is available
                                 if (moduleUpdates.containsKey(m.id)) {
                                     Text(
                                         text = "Update",
@@ -591,7 +565,7 @@ fun ModuleScreen() {
                 }
             }
         }
-        
+
         OutlinedButton(
             onClick = { 
                 scope.launch(Dispatchers.IO) {
@@ -599,12 +573,13 @@ fun ModuleScreen() {
                     showInstallLog = true
                 }
             },
+            enabled = isRootActive,
             colors = ButtonDefaults.outlinedButtonColors(contentColor = p.dim),
             shape = RoundedCornerShape(20.dp),
             modifier = Modifier.fillMaxWidth()
         ) { Text("View Installation Log") }
 
-        OutlinedButton(onClick = { zipPickerLauncher.launch("application/zip") }, enabled = !isInstalling, colors = ButtonDefaults.outlinedButtonColors(contentColor = p.dim), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) { Text(if (isInstalling) "Installing..." else "+ Install module") }
+        OutlinedButton(onClick = { zipPickerLauncher.launch("application/zip") }, enabled = isRootActive && !isInstalling, colors = ButtonDefaults.outlinedButtonColors(contentColor = p.dim), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) { Text(if (isInstalling) "Installing..." else "+ Install module") }
     }
 
     if (showInstallLog) {
@@ -626,13 +601,14 @@ fun ModuleScreen() {
             textContentColor = p.accent
         )
     }
-}                                     
-                                
+}
+
 // ---------- Settings ----------
 @Composable
 fun SettingsScreen(
     darkTheme: Boolean, onDarkThemeChange: (Boolean) -> Unit,
     accent: AccentTheme, onAccentChange: (AccentTheme) -> Unit,
+    isRootActive: Boolean, // NEW
     onBack: () -> Unit
 ) {
     val p = LocalNexusPalette.current
@@ -644,7 +620,6 @@ fun SettingsScreen(
     var adbRoot by remember { mutableStateOf(NexusEngine.isAdbRootEnabled()) }
     var tempRoot by remember { mutableStateOf(RootShell.execute("mount | grep '/system/bin/su'").isBlank()) }
     
-    // NEW: Time-Boxed Grants State
     val prefs = remember { context.getSharedPreferences("nexussu_prefs", 0) }
     var timeBoxedGrants by remember { mutableStateOf(prefs.getBoolean("time_boxed_grants", false)) }
     
@@ -691,34 +666,33 @@ fun SettingsScreen(
         SectionLabel("Root Behavior")
         GlassCard {
             Column {
-                BehaviorToggle("Disable Root", "Temporarily unmount su and busybox", checked = tempRoot) { isChecked ->
+                BehaviorToggle("Disable Root", "Temporarily unmount su and busybox", checked = tempRoot, enabled = isRootActive) { isChecked ->
                     scope.launch(Dispatchers.IO) {
                         val success = if (isChecked) NexusEngine.disableRoot() else NexusEngine.enableRoot()
                         if (success) tempRoot = isChecked
                     }
                 }
                 Divider(color = p.glassEdge, thickness = 0.5.dp)
-                // NEW: Time-Boxed Grants Toggle
-                BehaviorToggle("Time-boxed grants", "Auto-revoke root after 10 minutes", checked = timeBoxedGrants) { isChecked ->
+                BehaviorToggle("Time-boxed grants", "Auto-revoke root after 10 minutes", checked = timeBoxedGrants, enabled = isRootActive) { isChecked ->
                     prefs.edit().putBoolean("time_boxed_grants", isChecked).apply()
                     timeBoxedGrants = isChecked
                 }
                 Divider(color = p.glassEdge, thickness = 0.5.dp)
-                BehaviorToggle("Allow ADB Root", "Grant root permissions to ADB Shell (UID 2000)", checked = adbRoot) { isChecked ->
+                BehaviorToggle("Allow ADB Root", "Grant root permissions to ADB Shell (UID 2000)", checked = adbRoot, enabled = isRootActive) { isChecked ->
                     scope.launch(Dispatchers.IO) {
                         val success = NexusEngine.setAdbRootEnabled(isChecked)
                         if (success) adbRoot = isChecked
                     }
                 }
                 Divider(color = p.glassEdge, thickness = 0.5.dp)
-                BehaviorToggle("Systemless Hosts", "Redirect /system/etc/hosts for AdAway", checked = systemlessHosts) { isChecked ->
+                BehaviorToggle("Systemless Hosts", "Redirect /system/etc/hosts for AdAway", checked = systemlessHosts, enabled = isRootActive) { isChecked ->
                     scope.launch(Dispatchers.IO) {
                         val success = if (isChecked) NexusEngine.enableSystemlessHosts() else NexusEngine.disableSystemlessHosts()
                         if (success) systemlessHosts = isChecked
                     }
                 }
                 Divider(color = p.glassEdge, thickness = 0.5.dp)
-                BehaviorToggle("Safe Mode", "Disable all modules on next boot", checked = safeMode) { isChecked ->
+                BehaviorToggle("Safe Mode", "Disable all modules on next boot", checked = safeMode, enabled = isRootActive) { isChecked ->
                     scope.launch(Dispatchers.IO) {
                         if (isChecked) RootShell.execute("touch /data/adb/nexussu/safemode")
                         else RootShell.execute("rm -f /data/adb/nexussu/safemode")
@@ -759,25 +733,25 @@ fun SettingsScreen(
         SectionLabel("System Operations")
         GlassCard {
             Column {
-                SettingsRow("Reboot Device", "Standard system reboot") { scope.launch(Dispatchers.IO) { RootShell.execute("setprop sys.powerctl reboot") } }
+                SettingsRow("Reboot Device", "Standard system reboot", enabled = isRootActive) { scope.launch(Dispatchers.IO) { RootShell.execute("setprop sys.powerctl reboot") } }
                 Divider(color = p.glassEdge, thickness = 0.5.dp)
-                SettingsRow("Reboot to Recovery", "Restart into recovery mode") { scope.launch(Dispatchers.IO) { RootShell.execute("setprop sys.powerctl reboot,recovery") } }
+                SettingsRow("Reboot to Recovery", "Restart into recovery mode", enabled = isRootActive) { scope.launch(Dispatchers.IO) { RootShell.execute("setprop sys.powerctl reboot,recovery") } }
                 Divider(color = p.glassEdge, thickness = 0.5.dp)
-                SettingsRow("Reboot to Bootloader", "Restart into fastboot mode") { scope.launch(Dispatchers.IO) { RootShell.execute("setprop sys.powerctl reboot,bootloader") } }
+                SettingsRow("Reboot to Bootloader", "Restart into fastboot mode", enabled = isRootActive) { scope.launch(Dispatchers.IO) { RootShell.execute("setprop sys.powerctl reboot,bootloader") } }
             }
         }
 
         SectionLabel("Data Management")
         GlassCard {
             Column {
-                SettingsRow("Clear Root Logs", "Delete all stored su request logs") { scope.launch(Dispatchers.IO) { RootShell.execute("rm -f /data/adb/nexussu/logs.txt") } }
+                SettingsRow("Clear Root Logs", "Delete all stored su request logs", enabled = isRootActive) { scope.launch(Dispatchers.IO) { RootShell.execute("rm -f /data/adb/nexussu/logs.txt") } }
                 Divider(color = p.glassEdge, thickness = 0.5.dp)
-                SettingsRow("Reset Superuser List", "Revoke all granted root permissions") {
+                SettingsRow("Reset Superuser List", "Revoke all granted root permissions", enabled = isRootActive) {
                     scope.launch(Dispatchers.IO) { NexusEngine.clearAllRootGrants() }
                     Toast.makeText(context, "All root permissions revoked", Toast.LENGTH_SHORT).show()
                 }
                 Divider(color = p.glassEdge, thickness = 0.5.dp)
-                SettingsRow("Uninstall NexusSU", "Remove all binaries, modules, and data") {
+                SettingsRow("Uninstall NexusSU", "Remove all binaries, modules, and data", enabled = isRootActive) {
                     scope.launch(Dispatchers.IO) {
                         RootShell.execute("umount /system/bin/su")
                         RootShell.execute("umount /system/etc/hosts")
@@ -803,29 +777,31 @@ fun SettingsScreen(
 }
 
 @Composable
-fun BehaviorToggle(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+fun BehaviorToggle(title: String, subtitle: String, checked: Boolean, enabled: Boolean = true, onCheckedChange: (Boolean) -> Unit) {
     val p = LocalNexusPalette.current
     Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
+            Text(title, color = if (enabled) p.ink else p.dim, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
             Text(subtitle, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
         }
-        GlassToggle(checked, onCheckedChange = { onCheckedChange(it) })
+        GlassToggle(checked, onCheckedChange = { onCheckedChange(it) }, enabled = enabled)
     }
 }
 
 @Composable
-fun SettingsRow(title: String, subtitle: String, onClick: () -> Unit) {
+fun SettingsRow(title: String, subtitle: String, enabled: Boolean = true, onClick: () -> Unit) {
     val p = LocalNexusPalette.current
-    Row(Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, indication = null) { onClick() }.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().clickable(enabled = enabled, remember { MutableInteractionSource() }, indication = null) { onClick() }.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
+            Text(title, color = if (enabled) p.ink else p.dim, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
             Text(subtitle, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
         }
-        Box(Modifier.rotate(180f)) { BackIcon(tint = p.dim) }
+        if (enabled) {
+            Box(Modifier.rotate(180f)) { BackIcon(tint = p.dim) }
+        }
     }
-}        
-        
+}
+
 // ---------- Root Lens ----------
 @Composable
 fun RootLens(modifier: Modifier = Modifier, isActive: Boolean = false) {
