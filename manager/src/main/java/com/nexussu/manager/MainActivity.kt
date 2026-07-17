@@ -84,17 +84,15 @@ fun NexusSUApp(
     val prefs = remember { context.getSharedPreferences("nexussu_prefs", 0) }
     var isSetupComplete by remember { mutableStateOf(prefs.getBoolean("is_su_installed", false)) }
 
-    LaunchedEffect(isSetupComplete) {
+        LaunchedEffect(isSetupComplete) {
         if (!isSetupComplete) {
             withContext(Dispatchers.IO) {
-                // CRITICAL FIX: Handle setup failure gracefully
                 val suInstalled = NexusEngine.installSuBinary(context)
                 if (suInstalled) {
                     NexusEngine.installBusyBox(context)
+                    NexusEngine.installResetProp(context) // NEW
                     NexusEngine.applySavedRootGrants()
                 }
-                // Mark setup as complete regardless of success, so UI doesn't freeze.
-                // HomeScreen will show "Kernel Not Patched" if suInstalled is false.
                 prefs.edit().putBoolean("is_su_installed", true).apply()
                 isSetupComplete = true
             }
