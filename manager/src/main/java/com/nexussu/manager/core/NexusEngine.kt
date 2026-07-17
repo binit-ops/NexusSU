@@ -17,7 +17,7 @@ object NexusEngine {
     private const val DENYLIST_PATH = "/data/adb/nexussu/denylist.txt"
     const val ADB_UID = 2000
 
-    init { try { System.loadLibrary("nexus_bridge") } catch (e: UnsatisfiedLinkError) {} }
+        init { try { System.loadLibrary("nexus_bridge") } catch (e: UnsatisfiedLinkError) {} }
 
     external fun registerManager(): Boolean
     external fun grantUidAccess(uid: Int): Boolean
@@ -26,10 +26,27 @@ object NexusEngine {
     external fun escalateSelf(): Boolean
     external fun addDenyUid(uid: Int): Boolean
     external fun removeDenyUid(uid: Int): Boolean
+    external fun checkManager(): Boolean // NEW
+    external fun resetManager() // NEW
 
     fun isKernelActive(): Boolean {
         if (getEngineVersion() != 100) return false
-        return registerManager()
+        
+        // 1. If we are already the manager, we are good.
+        if (checkManager()) return true
+        
+        // 2. Try to register. If it succeeds, we are good.
+        if (registerManager()) return true
+        
+        // 3. Registration failed. This means another app (or a previous install) is registered.
+        // If we have root (e.g., we are reinstalling but daemon already gave us root), we can reset.
+        if (RootShell.isRootAvailable()) {
+            RootShell.execute("/data/adb/nexussu/bin/nexussu_daemon --reset-manager")
+            // Try to register again after reset
+            return registerManager()
+        }
+        
+        return false
     }
 
     fun installSuBinary(context: Context): Boolean {
