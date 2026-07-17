@@ -11,6 +11,7 @@
 #define CMD_GRANT_UID 1
 #define CMD_ESCALATE_SELF 3
 #define CMD_WAIT_FOR_DENY_PID 8
+#define CMD_RESET_MANAGER 10 // NEW: Missing define added
 
 #define MODULES_DIR "/data/adb/nexussu/modules"
 
@@ -129,6 +130,33 @@ void isolate_pid(int pid) {
     system(cmd);
 }
 
+// NEW: Apply Play Integrity property spoofing
+void apply_spoof_props() {
+    FILE *file = fopen("/data/adb/nexussu/spoof.prop", "r");
+    if (!file) return;
+    
+    char line[512];
+    while (fgets(line, sizeof(line), file)) {
+        if (line[0] == '#' || line[0] == '\n') continue;
+        line[strcspn(line, "\n")] = 0;
+        
+        char prop[256];
+        char val[256];
+        char *eq = strchr(line, '=');
+        if (eq) {
+            int prop_len = eq - line;
+            strncpy(prop, line, prop_len);
+            prop[prop_len] = '\0';
+            strcpy(val, eq + 1);
+            
+            char cmd[512];
+            snprintf(cmd, sizeof(cmd), "resetprop %s \"%s\" >/dev/null 2>&1 &", prop, val);
+            system(cmd);
+        }
+    }
+    fclose(file);
+}
+
 int main(int argc, char *argv[]) {
     // Allow the daemon to be run as a one-off command to reset the manager UID
     if (argc > 1 && strcmp(argv[1], "--reset-manager") == 0) {
@@ -150,6 +178,7 @@ int main(int argc, char *argv[]) {
     apply_saved_root_grants();
     execute_module_scripts();
     apply_module_props();
+    apply_spoof_props(); // NEW: Apply spoofed properties
     
     // Zero Battery Drain MagiskHide Loop
     while(1) {
