@@ -401,9 +401,34 @@ fun LogScreen() {
     }
 }
 
-// ---------- Module ----------
-// UPDATED: Added 'versionCode' and 'updateJson' fields
-data class ModuleItem(val id: String, val initial: String, val name: String, val version: String, val versionCode: Int, val author: String, val desc: String, val updateJson: String, val enabled: Boolean)
+                            }
+                            
+                            Text(
+                                text = "Uninstall",
+                                color = p.dim,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.clickable(remember { MutableInteractionSource() }, indication = null) {
+                                    scope.launch(Dispatchers.IO) {
+                                        NexusEngine.deleteModule(m.id)
+                                        modules.clear(); modules.addAll(NexusEngine.getInstalledModules())
+                                    }
+                                }.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                            GlassToggle(m.enabled, onCheckedChange = { checked ->
+                                modules[i] = m.copy(enabled = checked)
+                                scope.launch(Dispatchers.IO) { NexusEngine.setModuleEnabled(m.id, checked) }
+                            })
+                        }
+                        if (i < modules.lastIndex) Divider(color = p.glassEdge, thickness = 0.5.dp)
+                    }
+                }
+            }
+        }
+        
+ // ---------- Module ----------
+// UPDATED: Added 'isPendingRemoval' field
+data class ModuleItem(val id: String, val initial: String, val name: String, val version: String, val versionCode: Int, val author: String, val desc: String, val updateJson: String, val enabled: Boolean, val isPendingRemoval: Boolean = false)
 
 @Composable
 fun ModuleScreen() {
@@ -415,9 +440,7 @@ fun ModuleScreen() {
     var showInstallLog by remember { mutableStateOf(false) }
     var installLogContent by remember { mutableStateOf("") }
     
-    // NEW: Module update tracking
-    val moduleUpdates = remember { mutableStateMapOf<String, String>() } // module id -> zipUrl
-    var isCheckingUpdates by remember { mutableStateOf(false) }
+    val moduleUpdates = remember { mutableStateMapOf<String, String>() }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
@@ -426,8 +449,6 @@ fun ModuleScreen() {
                 modules.clear(); modules.addAll(installed)
             }
             
-            // NEW: Check for module updates in background
-            isCheckingUpdates = true
             installed.forEach { module ->
                 if (module.updateJson.isNotBlank()) {
                     val update = NexusEngine.checkModuleUpdate(module.updateJson)
@@ -438,7 +459,6 @@ fun ModuleScreen() {
                     }
                 }
             }
-            withContext(Dispatchers.Main) { isCheckingUpdates = false }
         }
     }
 
@@ -481,69 +501,90 @@ fun ModuleScreen() {
                             Column(Modifier.weight(1f)) {
                                 Text(m.name, color = p.ink, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text("v${m.version} by ${m.author}", color = p.dim, fontSize = 9.sp, fontFamily = MonoFont, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(m.desc, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                
+                                // NEW: Show pending removal warning
+                                if (m.isPendingRemoval) {
+                                    Text("Pending removal on next reboot", color = Color(0xFFFF5252), fontSize = 10.sp, fontFamily = MonoFont, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                } else {
+                                    Text(m.desc, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
                             }
                             
-                            // NEW: Update button if update is available
-                            if (moduleUpdates.containsKey(m.id)) {
+                            // NEW: Undo button if pending removal
+                            if (m.isPendingRemoval) {
                                 Text(
-                                    text = "Update",
+                                    text = "Undo",
                                     color = p.accent,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.clickable(remember { MutableInteractionSource() }, indication = null) {
-                                        val zipUrl = moduleUpdates[m.id] ?: return@clickable
-                                        isInstalling = true
                                         scope.launch(Dispatchers.IO) {
-                                            // Download the update ZIP
-                                            val cacheFile = File(context.cacheDir, "module_update.zip")
-                                            try {
-                                                val url = java.net.URL(zipUrl)
-                                                val conn = url.openConnection() as java.net.HttpURLConnection
-                                                conn.connect()
-                                                java.io.FileOutputStream(cacheFile).use { output -> conn.inputStream.copyTo(output) }
-                                                
-                                                // Install it
-                                                val success = RootShell.installModule(cacheFile.absolutePath)
-                                                cacheFile.delete()
-                                                
-                                                withContext(Dispatchers.Main) {
-                                                    isInstalling = false
-                                                    if (success) {
-                                                        Toast.makeText(context, "Module updated!", Toast.LENGTH_SHORT).show()
-                                                        moduleUpdates.remove(m.id)
-                                                        modules.clear(); modules.addAll(NexusEngine.getInstalledModules())
-                                                    } else {
-                                                        Toast.makeText(context, "Update failed.", Toast.LENGTH_SHORT).show()
-                                                    }
-                                                }
-                                            } catch (e: Exception) {
-                                                withContext(Dispatchers.Main) {
-                                                    isInstalling = false
-                                                    Toast.makeText(context, "Download failed.", Toast.LENGTH_SHORT).show()
-                                                }
-                                            }
+                                            NexusEngine.restoreModule(m.id)
+                                            modules.clear(); modules.addAll(NexusEngine.getInstalledModules())
                                         }
                                     }.padding(horizontal = 8.dp, vertical = 4.dp)
                                 )
+                            } else {
+                                // Update button if update is available
+                                if (moduleUpdates.containsKey(m.id)) {
+                                    Text(
+                                        text = "Update",
+                                        color = p.accent,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.clickable(remember { MutableInteractionSource() }, indication = null) {
+                                            val zipUrl = moduleUpdates[m.id] ?: return@clickable
+                                            isInstalling = true
+                                            scope.launch(Dispatchers.IO) {
+                                                val cacheFile = File(context.cacheDir, "module_update.zip")
+                                                try {
+                                                    val url = java.net.URL(zipUrl)
+                                                    val conn = url.openConnection() as java.net.HttpURLConnection
+                                                    conn.connect()
+                                                    java.io.FileOutputStream(cacheFile).use { output -> conn.inputStream.copyTo(output) }
+                                                    
+                                                    val success = RootShell.installModule(cacheFile.absolutePath)
+                                                    cacheFile.delete()
+                                                    
+                                                    withContext(Dispatchers.Main) {
+                                                        isInstalling = false
+                                                        if (success) {
+                                                            Toast.makeText(context, "Module updated!", Toast.LENGTH_SHORT).show()
+                                                            moduleUpdates.remove(m.id)
+                                                            modules.clear(); modules.addAll(NexusEngine.getInstalledModules())
+                                                        } else {
+                                                            Toast.makeText(context, "Update failed.", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    }
+                                                } catch (e: Exception) {
+                                                    withContext(Dispatchers.Main) {
+                                                        isInstalling = false
+                                                        Toast.makeText(context, "Download failed.", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            }
+                                        }.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                                
+                                Text(
+                                    text = "Uninstall",
+                                    color = p.dim,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.clickable(remember { MutableInteractionSource() }, indication = null) {
+                                        scope.launch(Dispatchers.IO) {
+                                            NexusEngine.deleteModule(m.id)
+                                            modules.clear(); modules.addAll(NexusEngine.getInstalledModules())
+                                        }
+                                    }.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                                
+                                GlassToggle(m.enabled, onCheckedChange = { checked ->
+                                    modules[i] = m.copy(enabled = checked)
+                                    scope.launch(Dispatchers.IO) { NexusEngine.setModuleEnabled(m.id, checked) }
+                                })
                             }
-                            
-                            Text(
-                                text = "Uninstall",
-                                color = p.dim,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.clickable(remember { MutableInteractionSource() }, indication = null) {
-                                    scope.launch(Dispatchers.IO) {
-                                        NexusEngine.deleteModule(m.id)
-                                        modules.clear(); modules.addAll(NexusEngine.getInstalledModules())
-                                    }
-                                }.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                            GlassToggle(m.enabled, onCheckedChange = { checked ->
-                                modules[i] = m.copy(enabled = checked)
-                                scope.launch(Dispatchers.IO) { NexusEngine.setModuleEnabled(m.id, checked) }
-                            })
                         }
                         if (i < modules.lastIndex) Divider(color = p.glassEdge, thickness = 0.5.dp)
                     }
@@ -585,7 +626,7 @@ fun ModuleScreen() {
             textContentColor = p.accent
         )
     }
-}                                
+}                                     
                                 
 // ---------- Settings ----------
 @Composable
