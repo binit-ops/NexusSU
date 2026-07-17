@@ -54,6 +54,8 @@
 + extern void nexussu_scrub_proc_buffer(struct file *file, char __user *buf, size_t count, ssize_t *ret);
 + extern void nexussu_set_manager_uid(uid_t uid);
 + extern bool nexussu_is_manager(uid_t uid);
++ extern bool nexussu_check_manager(void);
++ extern void nexussu_reset_manager(void);
 + extern bool nexussu_is_denied(kuid_t kuid);
 + extern void nexussu_add_deny_uid(uid_t uid);
 + extern void nexussu_remove_deny_uid(uid_t uid);
@@ -90,6 +92,7 @@
             <div class="code-toolbar"><div class="code-info"><span class="file-badge">include/linux/sched.h</span><span class="search-badge">🔍 Search: struct task_struct {</span></div></div>
             <pre><code class="language-c">
   /* Locate struct task_struct { ... } */
+  /* Add this near the end of the struct, before the closing brace }; */
 <code class="diff-add">
 + bool nexussu_granted;
 </code>
@@ -109,8 +112,13 @@
   /* Add this hook at the very top of the function: */
 <code class="diff-add">
 + if (option == 0x4E535553) { // "NSUS" Magic
-+     if (arg2 == 5) { nexussu_set_manager_uid(current_uid().val); return 0; }
-+     if (!nexussu_is_manager(current_uid().val)) return -EPERM;
++     if (current_uid().val != 0) { // Non-root callers must be the manager (or register)
++         if (arg2 == 5) { // Register Manager
++             if (nexussu_manager_uid == -1) { nexussu_set_manager_uid(current_uid().val); return 0; }
++             return -EPERM; // Already registered
++         }
++         if (!nexussu_is_manager(current_uid().val)) return -EPERM; // Not the manager
++     }
 +     switch (arg2) {
 +         case 1: nexussu_add_trusted_uid((uid_t)arg3); return 0;
 +         case 2: nexussu_revoke_trusted_uid((uid_t)arg3); return 0;
@@ -118,7 +126,9 @@
 +         case 4: return 100;
 +         case 6: nexussu_add_deny_uid((uid_t)arg3); return 0;
 +         case 7: nexussu_remove_deny_uid((uid_t)arg3); return 0;
-+         case 8: return nexussu_wait_for_deny_pid(); // NEW: Zero battery MagiskHide
++         case 8: return nexussu_wait_for_deny_pid();
++         case 9: return nexussu_check_manager();
++         case 10: nexussu_reset_manager(); return 0;
 +         default: return -EINVAL;
 +     }
 + }
@@ -300,4 +310,4 @@
 
     </div>
 </body>
-</html>
+    </html>
