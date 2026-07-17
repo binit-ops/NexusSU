@@ -16,7 +16,6 @@ static int nexussu_deny_count = 0;
 
 static uid_t nexussu_manager_uid = -1;
 
-// NEW: Wait Queue for zero-battery-drain MagiskHide
 static DECLARE_WAIT_QUEUE_HEAD(nexussu_deny_wait);
 static pid_t nexussu_deny_pids[256];
 static int nexussu_deny_pid_count = 0;
@@ -24,6 +23,18 @@ static DEFINE_SPINLOCK(nexussu_deny_pid_lock);
 
 void nexussu_set_manager_uid(uid_t uid) { nexussu_manager_uid = uid; }
 bool nexussu_is_manager(uid_t uid) { return (nexussu_manager_uid != -1 && uid == nexussu_manager_uid); }
+
+// NEW: Check if caller is the manager
+bool nexussu_check_manager(void) {
+    return nexussu_is_manager(current_uid().val);
+}
+
+// NEW: Reset manager UID (only callable by root)
+void nexussu_reset_manager(void) {
+    if (current_uid().val == 0) {
+        nexussu_manager_uid = -1;
+    }
+}
 
 bool nexussu_is_granted(kuid_t kuid) {
     int i; uid_t uid = kuid.val; unsigned long flags; bool found = false;
@@ -55,7 +66,6 @@ void nexussu_revoke_trusted_uid(uid_t uid) {
     spin_unlock_irqrestore(&nexussu_lock, flags);
 }
 
-// Denylist Logic
 bool nexussu_is_denied(kuid_t kuid) {
     int i; uid_t uid = kuid.val; unsigned long flags; bool found = false;
     spin_lock_irqsave(&nexussu_lock, flags);
@@ -86,7 +96,6 @@ void nexussu_remove_deny_uid(uid_t uid) {
     spin_unlock_irqrestore(&nexussu_lock, flags);
 }
 
-// NEW: Wait Queue Logic for Daemon
 void nexussu_report_deny_exec(pid_t pid) {
     spin_lock(&nexussu_deny_pid_lock);
     if (nexussu_deny_pid_count < 256) {
@@ -108,7 +117,6 @@ int nexussu_wait_for_deny_pid(void) {
     return pid;
 }
 
-/* VFS Stealth Check */
 bool nexussu_stealth_check(const char __user *filename) {
     char buf[256];
     if (!filename) return false;
@@ -119,7 +127,6 @@ bool nexussu_stealth_check(const char __user *filename) {
     return false;
 }
 
-/* Directory Stealth Check */
 bool nexussu_hide_dir_check(const char *name, int namlen) {
     if (!name) return false;
     if (nexussu_is_manager(current_uid().val)) return false;
@@ -128,7 +135,6 @@ bool nexussu_hide_dir_check(const char *name, int namlen) {
     return false;
 }
 
-/* UTSname Stealth Check */
 void nexussu_scrub_utsname(struct new_utsname __user *name) {
     struct new_utsname kname;
     if (!name) return;
@@ -148,7 +154,6 @@ void nexussu_scrub_utsname(struct new_utsname __user *name) {
     }
 }
 
-/* Procfs Scrubber */
 void nexussu_scrub_proc_buffer(struct file *file, char __user *buf, size_t count, ssize_t *ret) {
     char *kbuf; ssize_t read_bytes = *ret; bool modified = false; char *ptr;
     if (read_bytes <= 0 || !buf || !file) return;
