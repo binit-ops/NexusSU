@@ -1,3 +1,6 @@
+import java.net.URL
+import java.net.HttpURLConnection
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -126,11 +129,9 @@ tasks.register("downloadBusyBox") {
 
     doFirst {
         outputDir.mkdirs()
-        
-        // Use pure Kotlin networking to download the binary (Cross-platform, no curl needed)
         try {
-            val url = java.net.URL("https://github.com/Magisk-Modules-Repo/busybox-ndk/raw/master/busybox-arm64")
-            val connection = url.openConnection() as java.net.HttpURLConnection
+            val url = URL("https://github.com/Magisk-Modules-Repo/busybox-ndk/raw/master/busybox-arm64")
+            val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
             connection.connectTimeout = 15000
             connection.readTimeout = 15000
@@ -153,14 +154,7 @@ tasks.register("downloadBusyBox") {
     }
 }
 
-tasks.named("preBuild").configure {
-    dependsOn("compileSuBinary")
-    dependsOn("compileNexusDaemon")
-    dependsOn("downloadBusyBox")
-    dependsOn("downloadResetProp") // NEW
-}
-
-// --- DOWNLOAD REAL PREBUILT RESETPROP ---
+// --- DOWNLOAD RESETPROP ---
 tasks.register("downloadResetProp") {
     val outputDir = file("src/main/assets")
     val outputFile = file("$outputDir/resetprop.bin")
@@ -170,13 +164,8 @@ tasks.register("downloadResetProp") {
     doFirst {
         outputDir.mkdirs()
         try {
-            val url = java.net.URL("https://github.com/topjohnwu/Magisk/raw/master/native/out/arm64-v8a/libmagiskboot.so")
-            // Wait, Magisk's resetprop is inside libmagisk.so now. We need a standalone resetprop.
-            // We will use the standalone resetprop from the Magisk-Modules-Repo or AOSP.
-            // Actually, let's use the one from the OSMTN project or compile a simple wrapper.
-            // For simplicity, we will download a known-good static resetprop binary.
-            val realUrl = java.net.URL("https://github.com/nexussu/manager/raw/main/native/resetprop.bin")
-            val connection = realUrl.openConnection() as java.net.HttpURLConnection
+            val url = URL("https://github.com/nexussu/manager/raw/main/native/resetprop.bin")
+            val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
             connection.connectTimeout = 15000
             connection.readTimeout = 15000
@@ -190,8 +179,8 @@ tasks.register("downloadResetProp") {
                 }
                 println("[NexusSU] Successfully downloaded resetprop binary.")
             } else {
-                 // Fallback to a dummy if download fails to prevent build crash, though it won't work.
-                 outputFile.writeText("dummy")
+                 // Fallback to a dummy if download fails to prevent build crash
+                outputFile.writeText("dummy")
             }
             connection.disconnect()
         } catch (e: Exception) {
@@ -199,4 +188,11 @@ tasks.register("downloadResetProp") {
             outputFile.writeText("dummy")
         }
     }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn("compileSuBinary")
+    dependsOn("compileNexusDaemon")
+    dependsOn("downloadBusyBox")
+    dependsOn("downloadResetProp")
 }
