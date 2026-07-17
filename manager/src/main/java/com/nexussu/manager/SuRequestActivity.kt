@@ -1,12 +1,12 @@
 package com.nexussu.manager
 
-import android.app.Activity
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -36,7 +36,7 @@ import com.nexussu.manager.ui.MonoFont
 import com.nexussu.manager.ui.NexusSUTheme
 import java.io.File
 
-class SuRequestActivity : Activity() {
+class SuRequestActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
