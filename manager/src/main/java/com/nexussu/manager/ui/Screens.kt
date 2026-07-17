@@ -644,10 +644,13 @@ fun SettingsScreen(
     var adbRoot by remember { mutableStateOf(NexusEngine.isAdbRootEnabled()) }
     var tempRoot by remember { mutableStateOf(RootShell.execute("mount | grep '/system/bin/su'").isBlank()) }
     
+    // NEW: Time-Boxed Grants State
+    val prefs = remember { context.getSharedPreferences("nexussu_prefs", 0) }
+    var timeBoxedGrants by remember { mutableStateOf(prefs.getBoolean("time_boxed_grants", false)) }
+    
     var isCheckingUpdates by remember { mutableStateOf(false) }
     var updateUrl by remember { mutableStateOf<String?>(null) }
 
-    // NEW: Get real app version
     val currentVersion = remember {
         try {
             val pkgInfo = context.packageManager.getPackageInfo(context.packageName, 0)
@@ -695,6 +698,12 @@ fun SettingsScreen(
                     }
                 }
                 Divider(color = p.glassEdge, thickness = 0.5.dp)
+                // NEW: Time-Boxed Grants Toggle
+                BehaviorToggle("Time-boxed grants", "Auto-revoke root after 10 minutes", checked = timeBoxedGrants) { isChecked ->
+                    prefs.edit().putBoolean("time_boxed_grants", isChecked).apply()
+                    timeBoxedGrants = isChecked
+                }
+                Divider(color = p.glassEdge, thickness = 0.5.dp)
                 BehaviorToggle("Allow ADB Root", "Grant root permissions to ADB Shell (UID 2000)", checked = adbRoot) { isChecked ->
                     scope.launch(Dispatchers.IO) {
                         val success = NexusEngine.setAdbRootEnabled(isChecked)
@@ -726,7 +735,6 @@ fun SettingsScreen(
                     if (!isCheckingUpdates) {
                         isCheckingUpdates = true
                         scope.launch(Dispatchers.IO) {
-                            // NEW: Pass the real current version
                             val url = UpdateChecker.checkForUpdates(context, currentVersion)
                             isCheckingUpdates = false
                             updateUrl = url
@@ -783,7 +791,6 @@ fun SettingsScreen(
         SectionLabel("About")
         GlassCard {
             Column {
-                // NEW: Display real app version
                 KeyValueRow("Manager Version", currentVersion.removePrefix("v"))
                 Divider(color = p.glassEdge, thickness = 0.5.dp)
                 KeyValueRow("Engine Version", if (engineVersion == 100) "v100 (Active)" else "Not Found")
@@ -817,8 +824,8 @@ fun SettingsRow(title: String, subtitle: String, onClick: () -> Unit) {
         }
         Box(Modifier.rotate(180f)) { BackIcon(tint = p.dim) }
     }
-}                    
-
+}        
+        
 // ---------- Root Lens ----------
 @Composable
 fun RootLens(modifier: Modifier = Modifier, isActive: Boolean = false) {
