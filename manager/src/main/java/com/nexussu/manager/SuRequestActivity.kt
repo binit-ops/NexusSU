@@ -1,12 +1,12 @@
 package com.nexussu.manager
 
+import android.app.Activity
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -36,7 +36,7 @@ import com.nexussu.manager.ui.MonoFont
 import com.nexussu.manager.ui.NexusSUTheme
 import java.io.File
 
-class SuRequestActivity : ComponentActivity() {
+class SuRequestActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -140,7 +140,7 @@ fun SuRequestDialog(
     }
 
     Box(
-        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)),
+        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -159,7 +159,7 @@ fun SuRequestDialog(
                 )
             } else {
                 Box(
-                    Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)).background(p.glassFill),
+                    modifier = Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)).background(p.glassFill),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(appName.firstOrNull()?.uppercase() ?: "U", color = p.ink, fontWeight = FontWeight.Bold, fontSize = 24.sp)
@@ -172,3 +172,47 @@ fun SuRequestDialog(
             Text(appName, color = p.ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             Text("is requesting root access.", color = p.dim, fontSize = 13.sp)
+            Spacer(Modifier.height(20.dp))
+            
+            if (!isTimeBoxed) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(p.glassFill)
+                        .clickable(remember { MutableInteractionSource() }, indication = null) { rememberChoice = !rememberChoice }
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(modifier = Modifier.size(20.dp).clip(CircleShape).background(if (rememberChoice) p.accent else Color.Transparent))
+                    Text("Remember choice", color = p.ink, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                }
+                Spacer(Modifier.height(20.dp))
+            } else {
+                Text("Time-boxed mode active. Root will be revoked in 10 minutes.", color = p.accent, fontSize = 11.sp, fontFamily = MonoFont)
+                Spacer(Modifier.height(20.dp))
+            }
+            
+            Button(
+                onClick = { onGrant(rememberChoice) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = p.accent, contentColor = Color(0xFF0A0E14))
+            ) {
+                Text("Grant", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 4.dp))
+            }
+            
+            Spacer(Modifier.height(8.dp))
+            
+            OutlinedButton(
+                onClick = { onDeny(rememberChoice) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = p.dim)
+            ) {
+                Text("Deny", fontWeight = FontWeight.Medium, modifier = Modifier.padding(vertical = 4.dp))
+            }
+            
+            Spacer(Modifier.height(12.dp))
+            Text("Auto-denying in $timeLeft seconds...", color = p.dim.copy(alpha = 0.5f), fontSize = 10.sp, fontFamily = MonoFont)
+        }
+    }
+}
