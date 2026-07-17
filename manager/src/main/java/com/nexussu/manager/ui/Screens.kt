@@ -2,6 +2,7 @@ package com.nexussu.manager.ui
 
 import com.nexussu.manager.core.NexusEngine
 import com.nexussu.manager.core.RootShell
+import com.nexussu.manager.core.UpdateChecker
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
@@ -16,7 +17,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -47,6 +48,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.detectDragGestures
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.drawscope.StrokeCap
+import androidx.compose.ui.graphics.drawscope.StrokeJoin
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -54,6 +64,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -90,7 +101,6 @@ fun HomeScreen(isRootActive: Boolean, onOpenAdvanced: () -> Unit) {
     }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        // Kernel Warning Banner
         if (!isRootActive) {
             GlassCard(
                 modifier = Modifier.fillMaxWidth(),
@@ -120,7 +130,7 @@ fun HomeScreen(isRootActive: Boolean, onOpenAdvanced: () -> Unit) {
             Spacer(Modifier.height(12.dp))
             Text("$grantedCount apps granted · $moduleCount modules active", color = p.dim, fontSize = 11.sp, fontFamily = MonoFont)
         }
-        DeviceCard(isRootActive, onOpenAdvanced)
+        DeviceCard(isRootActive, onOpenAdvanced = onOpenAdvanced)
     }
 }
 
@@ -423,7 +433,7 @@ fun ModuleScreen(isRootActive: Boolean) {
             withContext(Dispatchers.Main) {
                 modules.clear(); modules.addAll(installed)
             }
-            
+
             installed.forEach { module ->
                 if (module.updateJson.isNotBlank()) {
                     val update = NexusEngine.checkModuleUpdate(module.updateJson)
@@ -485,7 +495,7 @@ fun ModuleScreen(isRootActive: Boolean) {
                                     Text(m.desc, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             }
-
+                            
                             if (m.isPendingRemoval) {
                                 Text(
                                     text = "Undo",
@@ -535,7 +545,7 @@ fun ModuleScreen(isRootActive: Boolean) {
                                                         isInstalling = false
                                                         Toast.makeText(context, "Download failed.", Toast.LENGTH_SHORT).show()
                                                     }
-                                                }
+                                                     }
                                             }
                                         }.padding(horizontal = 8.dp, vertical = 4.dp)
                                     )
@@ -565,7 +575,7 @@ fun ModuleScreen(isRootActive: Boolean) {
                 }
             }
         }
-
+        
         OutlinedButton(
             onClick = { 
                 scope.launch(Dispatchers.IO) {
@@ -608,7 +618,7 @@ fun ModuleScreen(isRootActive: Boolean) {
 fun SettingsScreen(
     darkTheme: Boolean, onDarkThemeChange: (Boolean) -> Unit,
     accent: AccentTheme, onAccentChange: (AccentTheme) -> Unit,
-    isRootActive: Boolean, // NEW
+    isRootActive: Boolean,
     onBack: () -> Unit
 ) {
     val p = LocalNexusPalette.current
@@ -654,7 +664,7 @@ fun SettingsScreen(
         SectionLabel("Stealth & Security")
         GlassCard {
             Column {
-                SettingsRow("Hide NexusSU App", "Remove icon from launcher. Dial *#*#63987378#*#* to restore.") {
+                SettingsRow("Hide NexusSU App", "Remove icon from launcher. Dial *#*#63987378#*#* to restore.", enabled = isRootActive) {
                     val pm = context.packageManager
                     val componentName = android.content.ComponentName(context, "com.nexussu.manager.MainActivity")
                     pm.setComponentEnabledSetting(componentName, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
@@ -762,7 +772,7 @@ fun SettingsScreen(
             }
         }
 
-        SectionLabel("About")
+         SectionLabel("About")
         GlassCard {
             Column {
                 KeyValueRow("Manager Version", currentVersion.removePrefix("v"))
