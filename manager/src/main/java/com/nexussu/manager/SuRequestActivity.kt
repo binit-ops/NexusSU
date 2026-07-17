@@ -53,6 +53,10 @@ class SuRequestActivity : Activity() {
             return
         }
 
+        // NEW: Check if Time-Boxed Grants is enabled in Settings
+        val prefs = getSharedPreferences("nexussu_prefs", 0)
+        val isTimeBoxed = prefs.getBoolean("time_boxed_grants", false)
+
         val pm = packageManager
         val packageName = pm.getNameForUid(callerUid)?.split(":")?.firstOrNull() ?: "Unknown"
         val appName = try {
@@ -74,17 +78,25 @@ class SuRequestActivity : Activity() {
                 SuRequestDialog(
                     appName = appName,
                     appIcon = appIcon,
+                    isTimeBoxed = isTimeBoxed, // Pass setting to UI
                     onGrant = { rememberChoice ->
                         Thread {
-                            if (rememberChoice) NexusEngine.saveGrantedUid(callerUid)
-                            else NexusEngine.grantUidTemporary(callerUid)
+                            // NEW: If time-boxed, always grant temporarily. Otherwise, respect rememberChoice.
+                            if (isTimeBoxed || !rememberChoice) {
+                                NexusEngine.grantUidTemporary(callerUid)
+                                if (isTimeBoxed) NexusEngine.scheduleRevoke(callerUid) // Start 10-min timer
+                            } else {
+                                NexusEngine.saveGrantedUid(callerUid)
+                            }
                             createResponseFile(pin, pid)
                             Handler(Looper.getMainLooper()).post { finish() }
                         }.start()
                     },
                     onDeny = { rememberChoice ->
                         Thread {
-                            if (rememberChoice) NexusEngine.saveDeniedUid(callerUid)
+                            if (!isTimeBoxed && rememberChoice) { // Only save denylist if not time-boxed
+                                NexusEngine.saveDeniedUid(callerUid)
+                            }
                             createResponseFile("0", pid)
                             Handler(Looper.getMainLooper()).post { finish() }
                         }.start()
@@ -94,7 +106,6 @@ class SuRequestActivity : Activity() {
         }
     }
     
-    // NEW: Write to unique PID-based file
     private fun createResponseFile(pin: String, pid: String) {
         try {
             val file = File("/data/local/tmp/.nexussu_response_$pid")
@@ -110,12 +121,18 @@ class SuRequestActivity : Activity() {
 fun SuRequestDialog(
     appName: String,
     appIcon: Bitmap?,
+    isTimeBoxed: Boolean, // NEW
     onGrant: (rememberChoice: Boolean) -> Unit,
     onDeny: (rememberChoice: Boolean) -> Unit
 ) {
     val p = LocalNexusPalette.current
     var timeLeft by remember { mutableStateOf(10) }
     var rememberChoice by remember { mutableStateOf(true) }
+
+    // If time-boxed is enabled, we never remember the choice
+    if (isTimeBoxed) {
+        rememberChoice = false
+    }
 
     LaunchedEffect(Unit) {
         while (timeLeft > 0) {
@@ -160,18 +177,24 @@ fun SuRequestDialog(
             Text("is requesting root access.", color = p.dim, fontSize = 13.sp)
             Spacer(Modifier.height(20.dp))
             
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(p.glassFill)
-                    .clickable(remember { MutableInteractionSource() }, indication = null) { rememberChoice = !rememberChoice }
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Box(Modifier.size(20.dp).clip(CircleShape).background(if (rememberChoice) p.accent else Color.Transparent))
-                Text("Remember choice", color = p.ink, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            // NEW: Hide "Remember choice" if Time-Boxed Grants is enabled
+            if (!isTimeBoxed) {
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(p.glassFill)
+                        .clickable(remember { MutableInteractionSource() }, indication = null) { rememberChoice = !rememberChoice }
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(Modifier.size(20.dp).clip(CircleShape).background(if (rememberChoice) p.accent else Color.Transparent))
+                    Text("Remember choice", color = p.ink, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                }
+                Spacer(Modifier.height(20.dp))
+            } else {
+                Text("Time-boxed mode active. Root will be revoked in 10 minutes.", color = p.accent, fontSize = 11.sp, fontFamily = MonoFont)
+                Spacer(Modifier.height(20.dp))
             }
-
-            Spacer(Modifier.height(20.dp))
+            
             Button(
                 onClick = { onGrant(rememberChoice) },
                 modifier = Modifier.fillMaxWidth(),
