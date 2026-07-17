@@ -234,6 +234,11 @@ object NexusEngine {
         return RootShell.deleteModule(id)
     }
 
+    // NEW: Wrapper for restoring a module
+    fun restoreModule(id: String): Boolean {
+        return RootShell.restoreModule(id)
+    }
+
     fun getInstallLog(): String {
         return RootShell.execute("cat /data/adb/nexussu/install.log 2>/dev/null || echo 'No log found.'")
     }
