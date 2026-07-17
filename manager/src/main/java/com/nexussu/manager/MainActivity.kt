@@ -83,20 +83,24 @@ fun NexusSUApp(
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("nexussu_prefs", 0) }
     var isSetupComplete by remember { mutableStateOf(prefs.getBoolean("is_su_installed", false)) }
+    
+    // NEW: Global Root Active State
+    var isRootActive by remember { mutableStateOf(false) }
 
-        LaunchedEffect(isSetupComplete) {
+    LaunchedEffect(isSetupComplete) {
         if (!isSetupComplete) {
             withContext(Dispatchers.IO) {
                 val suInstalled = NexusEngine.installSuBinary(context)
                 if (suInstalled) {
                     NexusEngine.installBusyBox(context)
-                    NexusEngine.installResetProp(context) // NEW
                     NexusEngine.applySavedRootGrants()
                 }
                 prefs.edit().putBoolean("is_su_installed", true).apply()
                 isSetupComplete = true
             }
         }
+        // Check if root is active after setup
+        isRootActive = withContext(Dispatchers.IO) { NexusEngine.isKernelActive() }
     }
 
     CompositionLocalProvider(LocalHazeState provides hazeState) {
@@ -130,11 +134,11 @@ fun NexusSUApp(
                             label = "screen"
                         ) { state ->
                             when (state) {
-                                "settings" -> SettingsScreen(darkTheme, onDarkThemeChange, accent, onAccentChange) { showSettings = false }
-                                "Home" -> HomeScreen(onOpenAdvanced = { showSettings = true })
-                                "Log" -> LogScreen()
-                                "Superuser" -> SuperuserScreen()
-                                else -> ModuleScreen()
+                                "settings" -> SettingsScreen(darkTheme, onDarkThemeChange, accent, onAccentChange, isRootActive) { showSettings = false }
+                                "Home" -> HomeScreen(isRootActive) { showSettings = true }
+                                "Log" -> LogScreen(isRootActive)
+                                "Superuser" -> SuperuserScreen(isRootActive)
+                                else -> ModuleScreen(isRootActive)
                             }
                         }
                     }
