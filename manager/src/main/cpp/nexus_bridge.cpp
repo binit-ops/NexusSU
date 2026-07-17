@@ -52,3 +52,19 @@ JNIEXPORT jint JNICALL
 Java_com_nexussu_manager_core_NexusEngine_getEngineVersion(JNIEnv *env, jobject thiz) {
     return prctl(NEXUSSU_PRCTL_MAGIC, CMD_GET_VERSION, 0, 0, 0);
 }
+
+#define CMD_CHECK_MANAGER 9
+#define CMD_RESET_MANAGER 10
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_nexussu_manager_core_NexusEngine_checkManager(JNIEnv *env, jobject thiz) {
+    int ret = prctl(NEXUSSU_PRCTL_MAGIC, CMD_CHECK_MANAGER, 0, 0, 0);
+    return ret == 1 ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_nexussu_manager_core_NexusEngine_resetManager(JNIEnv *env, jobject thiz) {
+    prctl(NEXUSSU_PRCTL_MAGIC, CMD_RESET_MANAGER, 0, 0, 0);
+}
