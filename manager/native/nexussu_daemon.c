@@ -86,23 +86,28 @@ void isolate_pid(int pid) {
     system(cmd);
 }
 
-int main() {
+int main(int argc, char *argv[]) {
+    // NEW: Allow the daemon to be run as a one-off command to reset the manager UID
+    if (argc > 1 && strcmp(argv[1], "--reset-manager") == 0) {
+        prctl(NEXUSSU_PRCTL_MAGIC, CMD_REGISTER_MANAGER, 0, 0, 0); // Temp register as root
+        prctl(NEXUSSU_PRCTL_MAGIC, CMD_RESET_MANAGER, 0, 0, 0);
+        return 0;
+    }
+
     const char *old_path = getenv("PATH");
     char new_path[512];
     if (old_path) snprintf(new_path, sizeof(new_path), "/data/adb/nexussu/bin:%s", old_path);
     else snprintf(new_path, sizeof(new_path), "/data/adb/nexussu/bin:/system/bin:/system/xbin:/vendor/bin");
     setenv("PATH", new_path, 1);
 
-    prctl(NEXUSSU_PRCTL_MAGIC, CMD_REGISTER_MANAGER, 0, 0, 0);
+    // CRITICAL FIX: Daemon does NOT register as manager. It runs as UID 0, so kernel allows it.
     prctl(NEXUSSU_PRCTL_MAGIC, CMD_ESCALATE_SELF, 0, 0, 0);
 
     apply_saved_root_grants();
     execute_module_scripts();
     apply_module_props();
     
-    // NEW: Zero Battery Drain MagiskHide Loop
     while(1) {
-        // This call blocks (sleeps) until the kernel wakes it up!
         int pid = prctl(NEXUSSU_PRCTL_MAGIC, CMD_WAIT_FOR_DENY_PID, 0, 0, 0);
         if (pid > 0) {
             isolate_pid(pid);
