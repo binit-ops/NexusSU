@@ -470,28 +470,6 @@ fun ModuleScreen(isRootActive: Boolean) {
         }
     }
 
-    val zipPickerLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) {
-            isInstalling = true
-            val cacheFile = File(context.cacheDir, "module.zip")
-            context.contentResolver.openInputStream(uri)?.use { input -> cacheFile.outputStream().use { output -> input.copyTo(output) } }
-            
-            Thread {
-                val success = RootShell.installModule(cacheFile.absolutePath)
-                cacheFile.delete()
-                Handler(Looper.getMainLooper()).post {
-                    isInstalling = false
-                    if (success) {
-                        Toast.makeText(context, "Module installed!", Toast.LENGTH_SHORT).show()
-                        modules.clear(); modules.addAll(NexusEngine.getInstalledModules())
-                    } else {
-                        Toast.makeText(context, "Installation failed. Check log.", Toast.LENGTH_LONG).show()
-                    }
-                }
-            }.start()
-        }
-    }
-
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Modules", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         if (!isRootActive) {
@@ -607,7 +585,7 @@ fun ModuleScreen(isRootActive: Boolean) {
                 }
             }
         }
-
+        
         OutlinedButton(
             onClick = { 
                 scope.launch(Dispatchers.IO) {
@@ -643,7 +621,7 @@ fun ModuleScreen(isRootActive: Boolean) {
             textContentColor = p.accent
         )
     }
-}
+}                                                    
 
 // ---------- Settings ----------
 @Composable
