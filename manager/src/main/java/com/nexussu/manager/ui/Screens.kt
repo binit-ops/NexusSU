@@ -52,9 +52,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.StrokeCap
-import androidx.compose.ui.graphics.drawscope.StrokeJoin
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -380,7 +377,11 @@ fun LogScreen(isRootActive: Boolean) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
             Text("Root Access Logs", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             Box(
-                Modifier.clip(CircleShape).background(p.glassFill).clickable(enabled = isRootActive, remember { MutableInteractionSource() }, indication = null) {
+                Modifier.clip(CircleShape).background(p.glassFill).clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    enabled = isRootActive
+                ) {
                     scope.launch(Dispatchers.IO) {
                         RootShell.execute("rm -f /data/adb/nexussu/logs.txt")
                         withContext(Dispatchers.Main) { logs.clear() }
@@ -433,7 +434,7 @@ fun ModuleScreen(isRootActive: Boolean) {
             withContext(Dispatchers.Main) {
                 modules.clear(); modules.addAll(installed)
             }
-
+            
             installed.forEach { module ->
                 if (module.updateJson.isNotBlank()) {
                     val update = NexusEngine.checkModuleUpdate(module.updateJson)
@@ -444,6 +445,28 @@ fun ModuleScreen(isRootActive: Boolean) {
                     }
                 }
             }
+        }
+    }
+
+    val zipPickerLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) {
+            isInstalling = true
+            val cacheFile = File(context.cacheDir, "module.zip")
+            context.contentResolver.openInputStream(uri)?.use { input -> cacheFile.outputStream().use { output -> input.copyTo(output) } }
+            
+            Thread {
+                val success = RootShell.installModule(cacheFile.absolutePath)
+                cacheFile.delete()
+                Handler(Looper.getMainLooper()).post {
+                    isInstalling = false
+                    if (success) {
+                        Toast.makeText(context, "Module installed!", Toast.LENGTH_SHORT).show()
+                        modules.clear(); modules.addAll(NexusEngine.getInstalledModules())
+                    } else {
+                        Toast.makeText(context, "Installation failed. Check log.", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }.start()
         }
     }
 
@@ -502,7 +525,10 @@ fun ModuleScreen(isRootActive: Boolean) {
                                     color = p.accent,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.clickable(remember { MutableInteractionSource() }, indication = null) {
+                                    modifier = Modifier.clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) {
                                         scope.launch(Dispatchers.IO) {
                                             NexusEngine.restoreModule(m.id)
                                             modules.clear(); modules.addAll(NexusEngine.getInstalledModules())
@@ -516,7 +542,10 @@ fun ModuleScreen(isRootActive: Boolean) {
                                         color = p.accent,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.clickable(remember { MutableInteractionSource() }, indication = null) {
+                                        modifier = Modifier.clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) {
                                             val zipUrl = moduleUpdates[m.id] ?: return@clickable
                                             isInstalling = true
                                             scope.launch(Dispatchers.IO) {
@@ -545,7 +574,7 @@ fun ModuleScreen(isRootActive: Boolean) {
                                                         isInstalling = false
                                                         Toast.makeText(context, "Download failed.", Toast.LENGTH_SHORT).show()
                                                     }
-                                                     }
+                                                }
                                             }
                                         }.padding(horizontal = 8.dp, vertical = 4.dp)
                                     )
@@ -556,7 +585,10 @@ fun ModuleScreen(isRootActive: Boolean) {
                                     color = p.dim,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium,
-                                    modifier = Modifier.clickable(remember { MutableInteractionSource() }, indication = null) {
+                                    modifier = Modifier.clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) {
                                         scope.launch(Dispatchers.IO) {
                                             NexusEngine.deleteModule(m.id)
                                             modules.clear(); modules.addAll(NexusEngine.getInstalledModules())
@@ -575,7 +607,7 @@ fun ModuleScreen(isRootActive: Boolean) {
                 }
             }
         }
-        
+
         OutlinedButton(
             onClick = { 
                 scope.launch(Dispatchers.IO) {
@@ -647,7 +679,11 @@ fun SettingsScreen(
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(Modifier.size(34.dp).clip(CircleShape).background(p.glassFill).border(1.dp, p.glassEdge, CircleShape).clickable(remember { MutableInteractionSource() }, indication = null, onClick = onBack), contentAlignment = Alignment.Center) { BackIcon(tint = p.ink) }
+            Box(Modifier.size(34.dp).clip(CircleShape).background(p.glassFill).border(1.dp, p.glassEdge, CircleShape).clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onBack
+            ), contentAlignment = Alignment.Center) { BackIcon(tint = p.ink) }
             Text("Settings", color = p.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         }
 
@@ -656,7 +692,10 @@ fun SettingsScreen(
         GlassCard {
             Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 AccentTheme.entries.forEach { theme ->
-                    Box(Modifier.size(26.dp).clip(CircleShape).background(theme.accent).border(2.dp, if (theme == accent) p.ink else Color.White.copy(alpha = 0.15f), CircleShape).clickable(remember { MutableInteractionSource() }, indication = null) { onAccentChange(theme) })
+                    Box(Modifier.size(26.dp).clip(CircleShape).background(theme.accent).border(2.dp, if (theme == accent) p.ink else Color.White.copy(alpha = 0.15f), CircleShape).clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onAccentChange(theme) })
                 }
             }
         }
@@ -772,7 +811,7 @@ fun SettingsScreen(
             }
         }
 
-         SectionLabel("About")
+        SectionLabel("About")
         GlassCard {
             Column {
                 KeyValueRow("Manager Version", currentVersion.removePrefix("v"))
@@ -801,7 +840,12 @@ fun BehaviorToggle(title: String, subtitle: String, checked: Boolean, enabled: B
 @Composable
 fun SettingsRow(title: String, subtitle: String, enabled: Boolean = true, onClick: () -> Unit) {
     val p = LocalNexusPalette.current
-    Row(Modifier.fillMaxWidth().clickable(enabled = enabled, remember { MutableInteractionSource() }, indication = null) { onClick() }.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().clickable(
+        interactionSource = remember { MutableInteractionSource() },
+        indication = null,
+        enabled = enabled,
+        onClick = onClick
+    ).padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, color = if (enabled) p.ink else p.dim, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
             Text(subtitle, color = p.dim, fontSize = 10.5.sp, fontFamily = MonoFont)
