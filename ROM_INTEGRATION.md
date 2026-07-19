@@ -1,6 +1,6 @@
 # NexusSU: Native ROM Integration Guide
 
-This guide is for OS maintainers building custom ROMs from source (AOSP/LineageOS). NexusSU uses a zero-file syscall hooking architecture, meaning there is no `/dev/` node and no daemon process.
+This guide is for OS maintainers building custom ROMs from source (AOSP/LineageOS). NexusSU uses a zero-file syscall hooking architecture, meaning there is no `/dev/` node and no daemon process running in the background.
 
 ## 1. Patch the Kernel Source
 NexusSU supports pre-GKI kernels (4.9, 4.14, 4.19, 5.4). 
@@ -11,11 +11,11 @@ NexusSU supports pre-GKI kernels (4.9, 4.14, 4.19, 5.4).
    chmod +x apply.sh
    ./apply.sh /path/to/your/kernel/source
    ```
-   *Note: If the script fails, refer to `docs/hooks.html` for manual patching.*
+   *Note: If the script fails due to heavy ROM source modifications, refer to the [Manual Patching Guide](https://binit-ops.github.io/NexusSU/hooks.html) for step-by-step instructions.*
 3. Build your kernel as usual.
 
 ## 2. Boot Persistence (init.nexussu.rc)
-Because the kernel allowlist resets on reboot, you must add an init script to re-apply grants and mount the `su` binary before Android starts.
+Because the kernel allowlist resets on reboot, you must add an init script to re-apply grants and mount the `su` binary before Android starts. Modern Android (10+) uses File-Based Encryption (FBE), so `/data` is not readable during `early-init`. The script must run at `post-fs-data`.
 
 **File:** `device/oem/codename/init/init.nexussu.rc`
 ```rc
