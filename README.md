@@ -9,11 +9,12 @@ Instead of relying on traditional bootimage patching or dynamic kernel modules, 
 ## ✨ Key Features
 
 * **Kernel-Native Integration:** Patched directly into the Linux kernel source tree. No ramdisk modifications or AnyKernel3 flashables required.
+* **Zero-File Syscall Architecture:** Uses a `prctl` magic number for kernel-to-userspace communication. No `/dev/` nodes, leaving zero filesystem traces.
 * **Dynamic SELinux Bypass:** Dynamically grants target processes full MAC (Mandatory Access Control) permissions without disabling global SELinux. The system stays in `Enforcing` mode to pass Play Integrity/SafetyNet.
-* **VFS & Procfs Stealth:** Actively hides root artifacts (`su` binaries, Magisk paths) from directory listings (`readdir`), file access checks (`faccessat`), and mount points (`/proc/mounts`).
-* **Syscall Communication:** Uses a `prctl` magic number for kernel-to-userspace communication, leaving zero filesystem traces.
-* **Real Systemless Modules:** Bind-mounts module files over `/system` without modifying the partition. Fully compatible with Magisk modules.
-* **Automated Patcher:** Includes an `apply.sh` script to automatically patch kernel source trees in seconds.
+* **Advanced Stealth:** Actively hides root artifacts (`su` binaries, Magisk paths) from `faccessat2`, `/proc/mounts`, `/proc/self/maps`, `/proc/self/mountinfo`, directory listings (`filldir64`), and spoofs kernel version strings (`uname`).
+* **MagiskHide-Style Isolation:** Zero-battery-drain mount namespace isolation for denylisted apps using a kernel wait queue.
+* **Real Systemless Modules:** 100% Magisk compatibility (`customize.sh`, `skip_mount`, `uninstall.sh`, `system.prop`, `updateJson`). Includes built-in BusyBox and ResetProp auto-installation.
+* **Premium Jetpack Compose UI:** A sleek, glassmorphic manager app with dynamic theming, fully wired superuser management, module updates, and real-time log streaming.
 
 ---
 
@@ -64,13 +65,13 @@ If your custom ROM developer has already integrated NexusSU, simply download the
 If the automated `apply.sh` script fails due to heavy ROM source modifications, you can manually patch the kernel. NexusSU modifies the following core kernel files:
 
 * `include/linux/sched.h` (Task tracking flag)
-* `kernel/sys.c` (prctl syscall hook)
-* `fs/exec.c` (Credential escalation)
+* `kernel/sys.c` (prctl syscall hook & uname scrubbing)
+* `fs/exec.c` (Credential escalation & denylist reporting)
 * `security/selinux/avc.c` (MAC bypass)
 * `security/selinux/hooks.c` (Context spoofing)
-* And 5 other files for stealth and state management.
+* And 7 other files for stealth and state management.
 
-Please refer to the full manual patching guide here: [Kernel Integration Guide](docs/hooks.html)
+Please refer to the full manual patching guide here: [Kernel Integration Guide](https://binit-ops.github.io/NexusSU/hooks.html)
 
 ---
 
