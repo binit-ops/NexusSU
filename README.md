@@ -1,4 +1,4 @@
-# NexusSU <img src="https://img.shields.io/badge/Engine-v100-34D399?style=flat-square" /> <img src="https://img.shields.io/badge/Kernel-4.9%20to%205.4-blueviolet?style=flat-square" /> <img src="https://img.shields.io/badge/SELinux-Bypassed-success?style=flat-square" />
+# NexusSU <img src="https://img.shields.io/badge/Engine-v100-34D399?style=flat-square" /> <img src="https://img.shields.io/badge/Kernel-4.9%20to%205.4-blueviolet?style=flat-square" /> <img src="https://img.shields.io/badge/SELinux-Bypassed-success?style=flat-square" /> [![Telegram](https://img.shields.io/badge/Telegram-Channel-2CA5E0?style=flat-square&logo=telegram)](https://t.me/opsgallery9)
 
 NexusSU is a kernel-level, source-injection root solution for Android devices running pre-GKI kernels (4.9, 4.14, 4.19, 5.4). 
 
@@ -72,6 +72,13 @@ If the automated `apply.sh` script fails due to heavy ROM source modifications, 
 * And 7 other files for stealth and state management.
 
 Please refer to the full manual patching guide here: [Kernel Integration Guide](https://binit-ops.github.io/NexusSU/hooks.html)
+
+---
+
+## 💬 Updates & Support
+
+* **Telegram Channel:** [https://t.me/opsgallery9](https://t.me/opsgallery9)
+* **GitHub Issues:** [Report a Bug](../../issues)
 
 ---
 
