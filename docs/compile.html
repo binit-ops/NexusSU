@@ -14,6 +14,7 @@
         .search-badge { color: #a6accd; font-size: 12px; font-family: monospace; }
         pre[class*="language-"] { margin: 0; padding: 15px; background: transparent !important; font-size: 14px; }
         .script-block { background: #1e1e2e; color: #a6accd; padding: 15px; border-radius: 8px; font-family: monospace; margin-bottom: 20px; border-left: 4px solid var(--accent); }
+        .note-box { background: rgba(59, 130, 246, 0.1); border-left: 4px solid #3b82f6; padding: 15px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; }
     </style>
 </head>
 <body>
@@ -25,68 +26,92 @@
 
     <div class="content hero">
         <h1>Compilation Guide</h1>
-        <p>This guide covers how to compile both the NexusSU Manager App and the patched kernel.</p>
+        <p>This guide covers how to compile both the NexusSU Manager App and your patched Android kernel.</p>
 
         <hr style="margin: 40px 0; border-color: var(--border);">
 
         <!-- PART 1: MANAGER APP -->
         <h2>Part 1: Building the Manager App (APK)</h2>
-        <p>The Manager App is built using Gradle. The build process automatically uses the Android NDK to compile the native <code>su</code> binary and the <code>nexussu_daemon</code> from C source code, packaging them into the APK's <code>assets</code> folder.</p>
+        <p>The Manager App is built using Gradle. The build process automatically invokes the Android NDK to compile the native <code>su</code> binary and <code>nexussu_daemon</code> C sources directly into the application assets.</p>
 
         <h3>Method A: GitHub Actions (Recommended)</h3>
-        <p>The easiest way to build the Manager App is via GitHub Actions. The repository includes a workflow that handles the entire build process.</p>
+        <p>The easiest way to build the Manager App is via automated CI. The repository includes a pre-configured workflow.</p>
         <ol>
-            <li>Push your code to the <code>main</code> branch of your GitHub repository.</li>
-            <li>Go to the <strong>Actions</strong> tab on GitHub.</li>
-            <li>The workflow will automatically download Gradle 8.11.1, compile the native C code, and build the APK.</li>
-            <li>Once complete, download the <code>NexusSU-Manager-APK</code> artifact from the workflow summary page.</li>
+            <li>Push your commits to the <code>main</code> branch of your repository.</li>
+            <li>Navigate to the <strong>Actions</strong> tab on GitHub.</li>
+            <li>Select the <strong>Build Manager APK</strong> workflow and trigger it manually or via push.</li>
+            <li>Once complete, download the compiled <code>NexusSU-Manager-APK</code> artifact from the run summary.</li>
         </ol>
 
-        <h3>Method B: Local Build (Android Studio)</h3>
-        <p>If you prefer to build locally, ensure you have Android Studio and the Android NDK (version 25.1.8937393 or newer) installed.</p>
+        <h3>Method B: Local Build (Android Studio / CLI)</h3>
+        <p>To build locally, ensure you have <strong>JDK 17+</strong>, <strong>Android SDK</strong>, and <strong>NDK (v25.1.8937393+)</strong> configured in your environment.</p>
         <div class="script-block">
             $ git clone https://github.com/your-username/NexusSU.git<br>
             $ cd NexusSU<br>
             $ ./gradlew assembleRelease
         </div>
-        <p>The compiled APK will be located in <code>manager/build/outputs/apk/release/</code>.</p>
+        <p>The output APK will be generated at: <code>manager/build/outputs/apk/release/app-release.apk</code>.</p>
 
         <hr style="margin: 40px 0; border-color: var(--border);">
 
         <!-- PART 2: KERNEL BUILD -->
-        <h2>Part 2: Building the Kernel</h2>
-        <p>Once you have patched your kernel source using the <code>apply.sh</code> script (as described in the <a href="hooks.html">Kernel Integration</a> guide), you can compile the kernel using the standard Android build process.</p>
+        <h2>Part 2: Building the Kernel (Proton Clang)</h2>
+        <p>Before compiling, ensure your kernel source tree is patched using the instructions in the <a href="hooks.html">Kernel Integration Guide</a>. We recommend using <strong>Proton Clang</strong> for legacy 4.9–5.4 kernels to ensure maximum performance and modern LLVM optimizations.</p>
+
+        <h3>1. Install Host Prerequisites</h3>
+        <p>Ensure your build host has the required toolchain dependencies installed:</p>
+        <div class="script-block">
+            $ sudo apt update && sudo apt install -y build-essential bc bison flex libssl-dev libncurses-dev git
+        </div>
+
+        <h3>2. Build Commands</h3>
+        <p>Execute the following commands to fetch the toolchain, set up the environment, and compile the kernel.</p>
 
         <div class="code-window">
             <div class="code-toolbar">
                 <div class="code-info">
                     <span class="file-badge">Terminal</span>
-                    <span class="search-badge">💻 Kernel Build Environment</span>
+                    <span class="search-badge">💻 Kernel Cross-Compilation</span>
                 </div>
             </div>
             <pre><code class="language-bash">
-# 1. Setup your environment variables
+# 1. Clone Proton Clang (Depth 1 for speed)
+git clone --depth=1 https://github.com/kdrag0n/proton-clang.git ~/proton-clang
+
+# 2. Export Target Architecture & Environment Setup
 export ARCH=arm64
 export SUBARCH=arm64
-export CROSS_COMPILE=aarch64-linux-android-
-export CROSS_COMPILE_COMPAT=arm-linux-androideabi-
+export O=out
 
-# 2. Navigate to your patched kernel source
+# 3. Export Proton Clang Paths & LLVM Tools
+export PATH="$HOME/proton-clang/bin:$PATH"
+export CC="clang"
+export CROSS_COMPILE="aarch64-linux-gnu-"
+export CROSS_COMPILE_ARM32="arm-linux-gnueabi-"
+export AR="llvm-ar"
+export NM="llvm-nm"
+export OBJCOPY="llvm-objcopy"
+export OBJDUMP="llvm-objdump"
+export STRIP="llvm-strip"
+
+# 4. Navigate to Patched Kernel Root & Create Build Dir
 cd /path/to/your/kernel/source
+mkdir -p $O
 
-# 3. Load your device's defconfig
-make OEM_defconfig
+# 5. Generate Defconfig
+make O=$O OEM_defconfig
 
-# 4. Build the kernel
-make -j$(nproc)
+# 6. Compile Kernel Image
+make O=$O -j$(nproc)
             </code></pre>
         </div>
         
-        <p>Once compilation is finished, the kernel image (usually <code>Image.gz-dtb</code> or <code>Image</code>) will be located in <code>arch/arm64/boot/</code>. You can then pack this into an AnyKernel3 zip or integrate it directly into your ROM's device tree.</p>
+        <p>Upon success, the kernel binary (typically <code>Image.gz-dtb</code> or <code>Image</code>) will be saved in <code>out/arch/arm64/boot/</code>. You can zip this image using AnyKernel3 for flashing via TWRP or fastboot.</p>
 
-        <h3>Important Note on Boot Daemons</h3>
-        <p>The NexusSU Manager App installs the <code>nexussu_daemon</code> to <code>/data/adb/nexussu/bin/</code> on first launch. For the daemon to run on boot, ensure your ROM's <code>init.nexussu.rc</code> script is configured as detailed in the <a href="rom_integration.html">ROM Integration Guide</a>.</p>
+        <div class="note-box">
+            <strong>Boot Daemon Setup:</strong> The Manager App drops the <code>nexussu_daemon</code> binary to <code>/data/adb/nexussu/bin/</code> upon first run. For automatic boot execution, ensure your device ramdisk or init scripts trigger this binary on startup.
+        </div>
 
     </div>
 </body>
-</html>
+    </html>
