@@ -2,7 +2,7 @@
  * NexusSU Master Stylesheet
  * Project: NexusSU Kernel-Level Root Documentation
  * Purpose: Global Layout, Glassmorphism UI, and Code Window styling.
- * Version: 1.0.1
+ * Version: 1.1.0
  */
 
 /* --- 1. VARIABLE DEFINITIONS --- */
@@ -24,6 +24,7 @@
     --danger: #f43f5e;
     --warning: #facc15;
     --success: #34d399;
+    --info: #3b82f6;
     
     /* Typography */
     --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -40,13 +41,28 @@ body {
     padding: 0;
     font-family: var(--font-primary);
     background-color: var(--bg-color);
-    /* Aesthetic Background Orbs */
     background-image: radial-gradient(circle at 15% 50%, rgba(56, 189, 248, 0.08), transparent 25%),
                       radial-gradient(circle at 85% 30%, rgba(129, 140, 248, 0.08), transparent 25%);
     background-attachment: fixed;
     color: var(--text-main);
     line-height: 1.7;
     -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Webkit Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-color); }
+::-webkit-scrollbar-thumb { background: #313244; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #45475a; }
+
+/* Global Fade-In Animation */
+@keyframes fadeUp {
+    from { opacity: 0; transform: translateY(15px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.content {
+    animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 /* --- 3. NAVIGATION COMPONENTS --- */
@@ -88,7 +104,7 @@ nav a.active {
 
 /* --- 4. MAIN CONTENT LAYOUT --- */
 .content {
-    max-width: 800px;
+    max-width: 900px;
     margin: 0 auto;
     padding: 80px 24px;
 }
@@ -104,6 +120,14 @@ h1 {
     line-height: 1.1;
 }
 
+.subtitle {
+    font-size: 1.2rem;
+    color: var(--text-dim);
+    margin-bottom: 40px;
+}
+
+h2 { font-size: 2rem; color: var(--text-main); margin-top: 50px; }
+
 h3 {
     font-size: 1.5rem;
     font-weight: 700;
@@ -115,21 +139,9 @@ h3 {
     gap: 12px;
 }
 
-p {
-    color: var(--text-dim);
-    font-size: 1.05rem;
-    margin-bottom: 24px;
-}
-
-ul {
-    padding-left: 20px;
-    margin-bottom: 32px;
-}
-
-li {
-    color: var(--text-dim);
-    margin-bottom: 12px;
-}
+p, li { color: var(--text-dim); font-size: 1.05rem; margin-bottom: 24px; }
+ul { padding-left: 20px; margin-bottom: 32px; }
+li { margin-bottom: 12px; }
 
 code {
     font-family: var(--font-code);
@@ -140,8 +152,64 @@ code {
     color: #e2e8f0;
 }
 
-/* --- 5. INTERACTIVE ELEMENTS --- */
-.button {
+/* --- 5. GRID LAYOUTS (HOMEPAGE) --- */
+.features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 24px;
+    margin-top: 50px;
+}
+
+.feature-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    padding: 24px;
+    border-radius: 12px;
+    transition: transform 0.3s ease, border-color 0.3s ease;
+}
+
+.feature-card:hover {
+    transform: translateY(-5px);
+    border-color: rgba(56, 189, 248, 0.3);
+}
+
+.feature-card h3 {
+    margin-top: 0;
+    margin-bottom: 12px;
+    font-size: 1.25rem;
+}
+
+.feature-card p {
+    margin-bottom: 0;
+    font-size: 0.95rem;
+}
+
+/* --- 6. BADGES & BUTTONS --- */
+.badges {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-start;
+    margin-top: 15px;
+    flex-wrap: wrap;
+}
+
+.badge {
+    background: #1e1e2e;
+    color: #cdd6f4;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-family: var(--font-code);
+    border: 1px solid #45475a;
+}
+
+.badge.highlight {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-glow);
+}
+
+.btn, .button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -156,14 +224,35 @@ code {
     box-shadow: 0 8px 25px rgba(56, 189, 248, 0.25);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     margin-top: 16px;
+    cursor: pointer;
 }
 
-.button:hover {
+.btn:hover, .button:hover {
     transform: translateY(-2px);
     box-shadow: 0 12px 30px rgba(56, 189, 248, 0.4);
 }
 
-/* --- 6. CODE WINDOW & TOOLBAR COMPONENTS --- */
+/* --- 7. CODE & TERMINAL BLOCKS --- */
+.script-block {
+    background: #1e1e2e;
+    color: #a6accd;
+    padding: 15px;
+    border-radius: 8px;
+    font-family: var(--font-code);
+    margin-bottom: 24px;
+    border-left: 4px solid var(--accent);
+    overflow-x: auto;
+}
+
+.hero-code {
+    margin: 40px 0;
+    background: #1e1e2e;
+    padding: 2px;
+    border-radius: 12px;
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+}
+
 .code-window {
     background: rgba(15, 17, 21, 0.6);
     border: 1px solid var(--glass-border);
@@ -171,20 +260,18 @@ code {
     overflow: hidden;
     margin-bottom: 32px;
     box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-    transition: all 0.3s ease;
 }
 
 .code-window pre {
     margin: 0;
     padding: 16px;
-    overflow-x: auto; /* FIX: Prevents codebase from breaking parent layout width */
-    background: transparent;
+    overflow-x: auto;
+    background: transparent !important;
 }
 
 .code-window code {
     padding: 0;
     background: transparent;
-    border-radius: 0;
 }
 
 .code-toolbar {
@@ -195,16 +282,9 @@ code {
     border-bottom: 1px solid var(--glass-border);
     padding: 12px 16px;
     font-size: 0.85rem;
-    flex-wrap: wrap;
-    gap: 10px;
 }
 
-.code-info {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    flex-wrap: wrap;
-}
+.code-info { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 
 .file-badge {
     color: var(--accent);
@@ -215,7 +295,6 @@ code {
     border-radius: 6px;
 }
 
-/* FIXED: Added missing badge layouts declared inside your HTML documents */
 .search-badge {
     color: var(--text-dim);
     font-family: var(--font-code);
@@ -225,105 +304,33 @@ code {
     border: 1px solid var(--glass-border);
 }
 
-.add-badge {
-    color: var(--success);
-    font-weight: 700;
-    background: rgba(52, 211, 153, 0.1);
-    padding: 2px 6px;
-    border-radius: 4px;
-}
-
-.code-actions button {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: var(--text-main);
-    padding: 6px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.8rem;
-    font-weight: 500;
-    transition: all 0.2s;
-}
-
-.code-actions button:hover {
-    background: rgba(255, 255, 255, 0.15);
-}
-
-/* Diff Add Styling */
 .diff-add {
     color: var(--success) !important;
     background: rgba(52, 211, 153, 0.04);
     border-left: 3px solid var(--success);
     padding-left: 8px;
     margin-left: -8px;
+    display: block;
 }
 
-/* Fullscreen Mode for Code */
-.code-window.expanded {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: 9999;
-    border-radius: 0;
-    display: flex;
-    flex-direction: column;
-    background: #0f1115;
-    margin: 0;
-}
-
-.code-window.expanded pre {
-    flex-grow: 1;
-    overflow-y: auto;
-}
-
-/* --- 7. TABLES & ALERTS --- */
-table {
-    width: 100%;
-    border-collapse: separate; /* FIX: Allows border-radius card geometry to map properly */
-    border-spacing: 0;
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: 12px;
-    overflow: hidden;
-    margin-top: 32px;
-    margin-bottom: 32px;
-}
-
-th, td {
-    padding: 18px 24px;
-    text-align: left;
-    border-bottom: 1px solid var(--glass-border);
-    color: var(--text-dim);
-}
-
-tr:last-child td {
-    border-bottom: none; /* Clean up lower canvas edge */
-}
-
-th {
-    font-weight: 600;
+/* --- 8. ALERTS & CALLOUTS --- */
+.note-box {
+    background: rgba(59, 130, 246, 0.08);
+    border-left: 4px solid var(--info);
+    padding: 16px 20px;
+    border-radius: 6px;
+    margin-bottom: 24px;
+    font-size: 0.95rem;
     color: var(--text-main);
-    background: rgba(255, 255, 255, 0.02);
 }
 
-.alert-panel {
-    background: rgba(250, 204, 21, 0.05);
-    border: 1px solid rgba(250, 204, 21, 0.1);
-    border-left: 4px solid var(--warning);
-    border-radius: 0 16px 16px 0;
-    padding: 24px;
-    margin: 40px 0;
-    backdrop-filter: blur(10px);
-}
-
-/* --- 8. MOBILE OPTIMIZATION --- */
-@media (max-width: 600px) {
-    h1 { font-size: 2.2rem; }
+/* --- 9. MOBILE OPTIMIZATION --- */
+@media (max-width: 768px) {
+    h1 { font-size: 2.5rem; }
+    h2 { font-size: 1.7rem; }
     h3 { font-size: 1.3rem; margin-top: 40px; }
     .content { padding: 40px 16px; }
+    nav { padding: 12px; }
     nav a { padding: 6px 14px; font-size: 0.85rem; }
-    th, td { padding: 12px 16px; font-size: 0.9rem; }
+    .features-grid { grid-template-columns: 1fr; }
     }
-    
