@@ -6,6 +6,13 @@
     <title>NexusSU | Professional Kernel Root</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+    <style>
+        .badges { display: flex; gap: 10px; justify-content: center; margin-top: 15px; flex-wrap: wrap; }
+        .badge { background: #313244; color: #cdd6f4; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-family: monospace; border: 1px solid #45475a; }
+        .badge.highlight { border-color: var(--accent); color: var(--accent); }
+        .hero-code { max-width: 600px; margin: 30px auto; text-align: left; background: #1e1e2e; padding: 15px; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        footer { text-align: center; margin-top: 50px; padding: 20px; color: #6c7086; font-size: 14px; border-top: 1px solid var(--border); }
+    </style>
 </head>
 <body>
     <nav>
@@ -18,30 +25,62 @@
         <h1>NexusSU</h1>
         <p class="subtitle">A kernel-native, zero-file root solution for Android.</p>
         
+        <div class="badges">
+            <span class="badge highlight">Architecture: ARM64</span>
+            <span class="badge">Kernel 4.9</span>
+            <span class="badge">Kernel 4.14</span>
+            <span class="badge">Kernel 4.19</span>
+            <span class="badge">Kernel 5.4</span>
+        </div>
+
+        <div class="hero-code">
+            <pre><code class="language-c">
+/* Zero-file privilege escalation via magic prctl */
+#define PR_NEXUSSU 0x4E535553
+#define CMD_ESCALATE 3
+
+int main() {
+    // Request Ring 0 Escalation
+    prctl(PR_NEXUSSU, CMD_ESCALATE, 0, 0, 0);
+    
+    // Process is now running as global root
+    execl("/system/bin/sh", "sh", NULL);
+}
+            </code></pre>
+        </div>
+        
         <div class="features-grid">
             <div class="feature-card">
                 <h3>Syscall Hooking</h3>
                 <p>Utilizes <code>prctl</code> magic numbers for kernel-to-userspace communication. No <code>/dev/</code> nodes, zero filesystem traces.</p>
             </div>
             <div class="feature-card">
+                <h3>Zero KABI Breakage</h3>
+                <p>Tracks privileges via a lightweight PID hash map rather than modifying <code>task_struct</code>. Retains 100% compatibility with pre-compiled vendor drivers.</p>
+            </div>
+            <div class="feature-card">
                 <h3>Dynamic SELinux Bypass</h3>
                 <p>Dynamically grants target processes full MAC permissions while keeping the system globally in <code>Enforcing</code> mode.</p>
             </div>
             <div class="feature-card">
-                <h3>Advanced Procfs Stealth</h3>
-                <p>Actively overwrites root artifacts in <code>/proc/mounts</code> and <code>/proc/self/maps</code> to bypass Play Integrity and banking apps.</p>
-            </div>
-            <div class="feature-card">
-                <h3>Real Systemless Modules</h3>
-                <p>Bind-mounts module files over <code>/system</code> without modifying the partition. Fully compatible with Magisk modules.</p>
+                <h3>Zero I/O Penalty Stealth</h3>
+                <p>Actively filters root artifacts in <code>/proc/mounts</code> and VFS lookups using targeted sequence hooks, completely avoiding global I/O degradation.</p>
             </div>
         </div>
 
-        <div class="getting-started">
+        <div class="getting-started" style="margin-top: 50px;">
             <h2>Getting Started</h2>
             <p>Ready to integrate NexusSU into your custom ROM or kernel?</p>
             <a href="hooks.html" class="btn">View Integration Guide →</a>
         </div>
     </div>
+
+    <footer>
+        <p>⚠️ <strong>Warning:</strong> Kernel patching is inherently dangerous. Designed for legacy boot architectures only.</p>
+    </footer>
+
+    <!-- Prism JS for syntax highlighting -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
 </body>
-</html>
+                </html>
